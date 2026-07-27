@@ -1,0 +1,143 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MUHASEBE
+  DEPO
+  SAHA
+  OBSERVER
+}
+
+enum Category {
+  IMPLANT
+  ABUTMENT
+  ARA PARÇA
+}
+
+enum LocationType {
+  MAIN_DEPOT
+  CLINIC_DEPOT
+}
+
+enum UtsStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model User {
+  id                 String        @id @default(cuid())
+  email              String        @unique
+  hashedPassword     String
+  fullName           String
+  role               Role          @default(DEPO)
+  isActive           Boolean       @default(true)
+  forcePasswordChange Boolean      @default(true)
+  executedTransfers  TransferLog[] @relation("ExecutedTransfers")
+  requestedTransfers TransferLog[] @relation("RequestedTransfers")
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+}
+
+model Product {
+  id            String      @id @default(cuid())
+  referenceCode String      @unique
+  brand         String
+  category      Category
+  name          String
+  diameter      Float?
+  length        Float?
+  purchasePrice Decimal
+  salePrice     Decimal
+  barcode       String?     @unique
+  stockItems    StockItem[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model Customer {
+  id           String     @id @default(cuid())
+  vknTckn      String     @unique
+  name         String
+  taxOffice    String?
+  address      String?
+  phone        String?
+  bizimHesapId String?
+  locations    Location[]
+  invoices     Invoice[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model Location {
+  id         String      @id @default(cuid())
+  name       String
+  type       LocationType
+  customerId String?
+  customer   Customer?   @relation(fields: [customerId], references: [id])
+  stockItems StockItem[]
+  fromTransfers TransferLog[] @relation("FromLocation")
+  toTransfers   TransferLog[] @relation("ToLocation")
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model StockItem {
+  id           String      @id @default(cuid())
+  productId    String
+  product      Product     @relation(fields: [productId], references: [id])
+  lotNumber    String
+  serialNumber String?
+  locationId   String
+  location     Location    @relation(fields: [locationId], references: [id])
+  isAvailable  Boolean     @default(true)
+  utsStatus    UtsStatus   @default(PENDING)
+  invoiceItems InvoiceItem[]
+  transfers    TransferLog[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model TransferLog {
+  id            String    @id @default(cuid())
+  fromLocationId String
+  fromLocation   Location  @relation("FromLocation", fields: [fromLocationId], references: [id])
+  toLocationId   String
+  toLocation     Location  @relation("ToLocation", fields: [toLocationId], references: [id])
+  stockItemId    String
+  stockItem      StockItem @relation(fields: [stockItemId], references: [id])
+  executedById   String
+  executedBy     User      @relation("ExecutedTransfers", fields: [executedById], references: [id])
+  requestedById  String?
+  requestedBy    User?     @relation("RequestedTransfers", fields: [requestedById], references: [id])
+  createdAt      DateTime  @default(now())
+}
+
+model Invoice {
+  id             String        @id @default(cuid())
+  invoiceNo      String?       @unique
+  customerId     String?
+  customer       Customer?     @relation(fields: [customerId], references: [id])
+  bizimHesapGuid String?
+  bizimHesapUrl  String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  items          InvoiceItem[]
+}
+
+model InvoiceItem {
+  id          String    @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice   @relation(fields: [invoiceId], references: [id])
+  stockItemId String
+  stockItem   StockItem @relation(fields: [stockItemId], references: [id])
+  salePrice   Decimal
+  discount    Decimal   @default(0)
+}

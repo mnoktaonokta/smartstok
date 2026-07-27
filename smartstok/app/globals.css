@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+:root {
+  --background: #05070d;
+  --foreground: #e8eefc;
+  --surface: #0b1220;
+  --surface-elevated: #111827;
+  --border: #1e293b;
+  --accent: #3b82f6;
+  --accent-bright: #60a5fa;
+  --accent-glow: rgba(59, 130, 246, 0.35);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-bright: var(--accent-bright);
+  --font-sans: var(--font-sora);
+  --font-mono: var(--font-jetbrains);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
+}
+
+@keyframes grid-drift {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 48px 48px;
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.75;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.auth-grid {
+  background-image:
+    linear-gradient(rgba(59, 130, 246, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59, 130, 246, 0.06) 1px, transparent 1px);
+  background-size: 48px 48px;
+  animation: grid-drift 28s linear infinite;
+}
+
+.auth-glow {
+  animation: pulse-glow 6s ease-in-out infinite;
+}
+
+.auth-panel {
+  animation: fade-up 0.55s ease-out both;
+}
+
+/* Ekranda gizli, yazdırmada görünür */
+.print-only {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 16mm;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-area {
+    display: block !important;
+  }
+
+  .print-table th,
+  .print-table td {
+    border: 1px solid #333;
+    padding: 8px 10px;
+    text-align: left;
+    color: black !important;
+  }
+
+  .print-table th {
+    background: #eee !important;
+    font-weight: 600;
+  }
+
+  .print-table .text-right {
+    text-align: right;
+  }
+}
+
