@@ -159,7 +159,7 @@ function mapAiItems(rawItems: unknown): ParsedInvoiceLine[] {
   if (!Array.isArray(rawItems)) return [];
 
   return rawItems
-    .map((row, index) => {
+    .map((row, index): ParsedInvoiceLine | null => {
       if (!row || typeof row !== "object") return null;
       const r = row as Record<string, unknown>;
 
@@ -186,7 +186,7 @@ function mapAiItems(rawItems: unknown): ParsedInvoiceLine[] {
         skt: skt || undefined,
       };
     })
-    .filter((l): l is ParsedInvoiceLine => l != null);
+    .filter((item): item is ParsedInvoiceLine => item !== null);
 }
 
 function parseJsonContent(rawContent: string): Record<string, unknown> {

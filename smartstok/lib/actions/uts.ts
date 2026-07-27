@@ -389,7 +389,10 @@ export async function queryUtsFirmInventoryAction(): Promise<{
       new Set(
         products
           .flatMap((p) => [p.barcode?.trim(), p.referenceCode?.trim()])
-          .filter((c): c is string => Boolean(c) && /^\d{8,14}$/.test(c)),
+          .filter(
+            (c): c is string =>
+              typeof c === "string" && /^\d{8,14}$/.test(c),
+          ),
       ),
     );
 
