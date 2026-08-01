@@ -4,11 +4,9 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import {
-  calcLineAmounts,
-  formatBizimHesapAmount,
-  postBizimHesapInvoice,
-} from "@/services/bizimHesap";
+import { calcLineAmounts } from "@/services/bizimHesap";
+import { ErpFactory } from "@/lib/services/erp/ErpFactory";
+import type { DraftInvoiceData } from "@/lib/services/erp/types";
 import { assertCanMutate } from "@/lib/roles";
 import { customerPortfolioWhere } from "@/lib/portfolio";
 import type { UserRole } from "@/types/next-auth";
@@ -139,14 +137,6 @@ export async function createInvoiceAction(
     }
     assertCanMutate(session.user.roles);
 
-    const firmId = process.env.BIZIMHESAP_FIRM_ID?.trim();
-    if (!firmId) {
-      return {
-        error:
-          "BIZIMHESAP_FIRM_ID tanımlı değil. .env dosyasına ekleyip sunucuyu yeniden başlatın.",
-      };
-    }
-
     const parsed = createInvoiceSchema.safeParse(input);
     if (!parsed.success) {
       return { error: parsed.error.issues[0]?.message ?? "Geçersiz form." };
@@ -264,56 +254,50 @@ export async function createInvoiceAction(
     due.setDate(due.getDate() + 30);
     const invoiceNo = `SD-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${Date.now().toString(36).toUpperCase()}`;
 
-    const payload = {
-      firmId,
+    const draft: DraftInvoiceData = {
       invoiceNo,
-      invoiceType: 3,
       note: parsed.data.note || "SmartStok konsinye faturalandırma",
-      dates: {
-        invoiceDate: now.toISOString(),
-        dueDate: due.toISOString(),
-        deliveryDate: now.toISOString(),
-      },
+      invoiceDate: now.toISOString(),
+      dueDate: due.toISOString(),
+      deliveryDate: now.toISOString(),
       customer: {
-        customerId: customer.id,
+        id: customer.id,
         title: customer.name,
         address: customer.address ?? undefined,
         taxOffice: customer.taxOffice ?? undefined,
         taxNo: customer.vknTckn,
         phone: customer.phone ?? undefined,
+        externalId: customer.bizimHesapId,
       },
       amounts: {
         currency: "TL",
-        gross: formatBizimHesapAmount(totals.gross),
-        discount: formatBizimHesapAmount(totals.discount),
-        net: formatBizimHesapAmount(totals.net),
-        tax: formatBizimHesapAmount(totals.tax),
-        total: formatBizimHesapAmount(totals.total),
+        gross: totals.gross,
+        discount: totals.discount,
+        net: totals.net,
+        tax: totals.tax,
+        total: totals.total,
       },
-      details: detailLines.map((line) => ({
+      lines: detailLines.map((line) => ({
         productId: resolveBizimHesapProductId(line),
         productName: line.productName,
         note: `Lot ${line.lotNumber}`,
         barcode: line.barcode ?? undefined,
-        taxRate: TAX_RATE.toFixed(2),
+        taxRate: TAX_RATE,
         quantity: line.quantity,
-        unitPrice: formatBizimHesapAmount(line.unitPrice),
-        grossPrice: formatBizimHesapAmount(line.amounts.gross),
-        discount: formatBizimHesapAmount(line.amounts.discount),
-        net: formatBizimHesapAmount(line.amounts.net),
-        tax: formatBizimHesapAmount(line.amounts.tax),
-        total: formatBizimHesapAmount(line.amounts.total),
+        unitPrice: line.unitPrice,
+        gross: line.amounts.gross,
+        discount: line.amounts.discount,
+        net: line.amounts.net,
+        tax: line.amounts.tax,
+        total: line.amounts.total,
       })),
     };
 
-    const apiResult = await postBizimHesapInvoice(payload);
+    const erp = await ErpFactory.getInstance();
+    const apiResult = await erp.createDraftInvoice(draft);
 
-    if (apiResult.error) {
-      return { error: `Bizim Hesap: ${apiResult.error}` };
-    }
-
-    if (!apiResult.guid) {
-      return { error: "Bizim Hesap GUID dönmedi; fatura kaydı yapılmadı." };
+    if (!apiResult.ok) {
+      return { error: `ERP: ${apiResult.error}` };
     }
 
     const invoice = await prisma.$transaction(async (tx) => {
@@ -322,7 +306,7 @@ export async function createInvoiceAction(
           invoiceNo,
           customerId: customer.id,
           bizimHesapGuid: apiResult.guid,
-          bizimHesapUrl: apiResult.url || null,
+          bizimHesapUrl: apiResult.url ?? null,
         },
       });
 

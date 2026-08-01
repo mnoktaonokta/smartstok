@@ -1,26 +1,24 @@
 "use server";
 
 /**
- * Bizim Hesap Server Actions — yalnızca sunucuda çalışır.
+ * ERP müşteri senkronu ve cari ekstre — ErpFactory üzerinden.
  */
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { assertCanMutate, mutationDeniedMessage } from "@/lib/roles";
-import {
-  getAllCustomers,
-  getCustomerAbstract,
-  type BizimHesapAbstract,
-} from "@/lib/services/bizimHesapService";
+import { ErpFactory } from "@/lib/services/erp/ErpFactory";
+import type { ErpAbstract } from "@/lib/services/erp/types";
 
 export type CustomerAbstractActionResult = {
   error?: string;
-  data?: BizimHesapAbstract;
+  data?: ErpAbstract;
 };
 
 /**
- * Müşterinin Bizim Hesap cari ekstresini sunucu tarafında çeker.
+ * Müşterinin cari ekstresini seçili ERP üzerinden çeker.
+ * Tanımlayıcı: bizimHesapId (harici kod) yoksa VKN.
  */
 export async function getCustomerAbstractAction(
   customerId: string,
@@ -37,34 +35,30 @@ export async function getCustomerAbstractAction(
 
     const customer = await prisma.customer.findUnique({
       where: { id: customerId },
-      select: { bizimHesapId: true, name: true },
+      select: { bizimHesapId: true, vknTckn: true, name: true },
     });
 
     if (!customer) {
       return { error: "Müşteri bulunamadı." };
     }
 
-    if (!customer.bizimHesapId?.trim()) {
+    const identifier =
+      customer.bizimHesapId?.trim() || customer.vknTckn?.trim() || "";
+    if (!identifier) {
       return {
         error:
-          "Bu müşteri için Bizim Hesap cari kodu (bizimHesapId) tanımlı değil. Müşteri kartından ekleyin.",
+          "Bu müşteri için cari kod (bizimHesapId) veya VKN tanımlı değil. Müşteri kartından ekleyin.",
       };
     }
 
-    console.info("[getCustomerAbstractAction] İstek", {
-      smartStokCustomerId: customerId,
-      bizimHesapCariKod: customer.bizimHesapId,
-      hasToken: Boolean(process.env.BIZIMHESAP_TOKEN?.trim()),
-      hasFirmId: Boolean(process.env.BIZIMHESAP_FIRM_ID?.trim()),
-    });
-
-    const result = await getCustomerAbstract(customer.bizimHesapId.trim());
+    const erp = await ErpFactory.getInstance();
+    const result = await erp.getCustomerAbstract(identifier);
 
     if (!result.ok) {
-      console.error("[getCustomerAbstractAction] Servis hatası", {
+      console.error("[getCustomerAbstractAction] ERP hatası", {
         error: result.error,
         customerId,
-        bizimHesapId: customer.bizimHesapId,
+        identifier,
       });
       return { error: result.error };
     }
@@ -85,9 +79,8 @@ export type SyncCustomersResult = {
 };
 
 /**
- * Bizim Hesap müşterilerini SmartStok’a senkronize eder (upsert).
- * Eşleşme: bizimHesapId → yoksa VKN/TCKN.
- * Yeni kayıtlarda konsinye deposu da oluşturulur.
+ * Seçili ERP müşterilerini SmartStok’a senkronize eder (upsert).
+ * Eşleşme: bizimHesapId (externalId) → yoksa VKN/TCKN.
  */
 export async function syncCustomersFromBizimHesapAction(): Promise<SyncCustomersResult> {
   try {
@@ -97,7 +90,8 @@ export async function syncCustomersFromBizimHesapAction(): Promise<SyncCustomers
     }
     assertCanMutate(session.user.roles);
 
-    const api = await getAllCustomers();
+    const erp = await ErpFactory.getInstance();
+    const api = await erp.syncCustomers();
     if (!api.ok) {
       return { error: api.error };
     }
@@ -113,7 +107,7 @@ export async function syncCustomersFromBizimHesapAction(): Promise<SyncCustomers
       if (!hasValidVkn) {
         skipped += 1;
         console.warn("[syncCustomers] VKN eksik/geçersiz, atlandı", {
-          bizimHesapId: remote.bizimHesapId,
+          externalId: remote.externalId,
           name: remote.name,
           vkn,
         });
@@ -121,7 +115,7 @@ export async function syncCustomersFromBizimHesapAction(): Promise<SyncCustomers
       }
 
       const existingByBh = await prisma.customer.findFirst({
-        where: { bizimHesapId: remote.bizimHesapId },
+        where: { bizimHesapId: remote.externalId },
         include: { locations: { where: { type: "CLINIC_DEPOT" }, take: 1 } },
       });
 
@@ -144,7 +138,7 @@ export async function syncCustomersFromBizimHesapAction(): Promise<SyncCustomers
             taxOffice: remote.taxOffice,
             address: remote.address,
             phone: remote.phone,
-            bizimHesapId: remote.bizimHesapId,
+            bizimHesapId: remote.externalId,
           },
         });
 
@@ -175,8 +169,8 @@ export async function syncCustomersFromBizimHesapAction(): Promise<SyncCustomers
             taxOffice: remote.taxOffice,
             address: remote.address,
             phone: remote.phone,
-            bizimHesapId: remote.bizimHesapId,
-            assignedUserId: null, // Admin dağıtır
+            bizimHesapId: remote.externalId,
+            assignedUserId: null,
           },
         });
 

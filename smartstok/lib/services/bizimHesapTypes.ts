@@ -1,31 +1,13 @@
-/** Bizim Hesap cari ekstre DTO’ları — client/server ortak tipler (secrets yok). */
+/** Cari ekstre DTO’ları — client/server ortak. */
 
-export type BizimHesapAbstractLine = {
-  date: string;
-  type: string;
-  note: string;
-  debit: number;
-  credit: number;
-  balance: number;
-  payment?: string;
-};
+export type {
+  ErpAbstract as BizimHesapAbstract,
+  ErpAbstractLine as BizimHesapAbstractLine,
+} from "@/lib/services/erp/types";
 
-export type BizimHesapAbstract = {
-  title: string;
-  email?: string;
-  phone?: string;
-  balance: number;
-  debitSum: number;
-  creditSum: number;
-  link?: string;
-  lines: BizimHesapAbstractLine[];
-};
+export type { GetCustomerAbstractResult } from "@/lib/services/erp/types";
 
-export type GetCustomerAbstractResult =
-  | { ok: true; data: BizimHesapAbstract }
-  | { ok: false; error: string };
-
-/** Bizim Hesap müşteri listesi → SmartStok Customer map */
+/** @deprecated ErpCustomer tercih edin — geriye dönük alan adı */
 export type BizimHesapCustomerMapped = {
   bizimHesapId: string;
   code: string | null;

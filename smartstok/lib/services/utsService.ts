@@ -8,6 +8,8 @@
  * bayi stoklarında boş SNC döner. Öncelik ayrintiliTekilUrun + tekilUrun/sorgula.
  */
 
+import { resolveUtsCredentials } from "@/lib/services/app-credentials";
+
 const DEFAULT_BASE_URL = "https://utsuygulama.saglik.gov.tr";
 const PAGE_SIZE = 250;
 const MAX_PAGES = 40;
@@ -42,16 +44,13 @@ type QueryStrategy = {
   mode: "ayrintili" | "tekil" | "uretici-offset" | "uretici-san";
 };
 
-function getConfig() {
-  const token = process.env.UTS_TOKEN?.trim();
-  const firmNo = process.env.UTS_FIRM_NO?.trim();
-  const apiUrl = (
-    process.env.UTS_API_URL?.trim() ||
-    process.env.UTS_BASE_URL?.trim() ||
-    DEFAULT_BASE_URL
-  ).replace(/\/$/, "");
-
-  return { token, firmNo, apiUrl };
+async function getConfig() {
+  const { token, firmNo, apiUrl } = await resolveUtsCredentials();
+  return {
+    token: token || undefined,
+    firmNo: firmNo || undefined,
+    apiUrl: apiUrl || DEFAULT_BASE_URL,
+  };
 }
 
 function getUtsHost(apiUrl: string): string {
@@ -395,7 +394,7 @@ async function paginateStrategy(
 export async function queryInventoryByUno(
   uno: string,
 ): Promise<UtsInventoryItem[]> {
-  const { token, apiUrl } = getConfig();
+  const { token, apiUrl } = await getConfig();
   if (!token) {
     throw new Error(
       "ÜTS yapılandırması eksik: UTS_TOKEN tanımlı değil. Lütfen sistem yöneticisine bildirin.",
@@ -436,7 +435,7 @@ export async function queryInventoryByUno(
  * ÜTS’deki firma envanterini sorgular (sahip olunan / üzerinizdeki tekil ürünler).
  */
 export async function getFirmInventory(): Promise<FirmInventoryResult> {
-  const { token, apiUrl } = getConfig();
+  const { token, apiUrl } = await getConfig();
 
   if (!token) {
     throw new Error(

@@ -9,6 +9,7 @@ import { AdminSyncCustomersButton } from "@/components/admin/admin-sync-customer
 import { AdminCategoryStockCard } from "@/components/admin/admin-category-stock-card";
 import { AdminProductImport } from "@/components/admin/admin-product-import";
 import { AdminExportStocksButton } from "@/components/admin/admin-export-stocks-button";
+import { AdminCompanySettingsModal } from "@/components/admin/admin-company-settings-modal";
 import {
   Card,
   CardContent,
@@ -58,6 +59,7 @@ export default async function AdminPage() {
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
           <AdminExportStocksButton />
+          <AdminCompanySettingsModal />
         </div>
       </div>
 

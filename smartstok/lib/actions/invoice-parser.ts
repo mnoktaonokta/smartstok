@@ -2,8 +2,10 @@
 
 /**
  * Fatura OCR / AI analizi.
- * AI_API_KEY (veya OPENAI_API_KEY) doluysa OpenAI gpt-4o vision çalışır.
+ * CompanySettings.aiApiKey (veya .env AI_API_KEY) doluysa OpenAI gpt-4o vision çalışır.
  */
+
+import { resolveAiApiKey } from "@/lib/services/app-credentials";
 
 export type ParsedInvoiceLine = {
   productName: string;
@@ -21,14 +23,6 @@ export type ParseInvoiceResult = {
   invoiceNumber?: string;
   source?: "openai";
 };
-
-function getAiApiKey() {
-  return (
-    process.env.AI_API_KEY?.trim() ||
-    process.env.OPENAI_API_KEY?.trim() ||
-    ""
-  );
-}
 
 function extensionOf(filename: string): string {
   const i = filename.lastIndexOf(".");
@@ -208,11 +202,11 @@ export async function parseInvoiceWithAiAction(
   formData: FormData,
 ): Promise<ParseInvoiceResult> {
   try {
-    const apiKey = getAiApiKey();
+    const apiKey = await resolveAiApiKey();
     if (!apiKey) {
       return {
         error:
-          "API Anahtarı eksik. .env dosyasına AI_API_KEY (veya OPENAI_API_KEY) ekleyin.",
+          "API Anahtarı eksik. Admin → Firma Bilgileri’nden AI API Key girin.",
       };
     }
 

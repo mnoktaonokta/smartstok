@@ -12,6 +12,7 @@ import {
   type UtsInventoryItem,
 } from "@/lib/services/utsService";
 import { sendVermeBildirimi } from "@/lib/uts-api";
+import { resolveUtsCredentials } from "@/lib/services/app-credentials";
 
 export type UtsItemResult = {
   id: string;
@@ -167,11 +168,12 @@ export async function notifySelectedToUtsAction(
       return { error: "En az bir ürün seçilmeli." };
     }
 
-    const gonderenKurumNo = process.env.UTS_FIRM_NO?.trim() ?? "";
+    const utsCreds = await resolveUtsCredentials();
+    const gonderenKurumNo = utsCreds.firmNo;
     if (!gonderenKurumNo) {
       return {
         error:
-          "ÜTS yapılandırması eksik: UTS_FIRM_NO tanımlı değil. Lütfen sistem yöneticisine bildirin.",
+          "ÜTS yapılandırması eksik: ÜTS Firma No tanımlı değil. Admin → Firma Bilgileri’nden girin.",
       };
     }
 

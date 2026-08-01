@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { getCustomerAbstract } from "@/lib/services/bizimHesapService";
+import { ErpFactory } from "@/lib/services/erp/ErpFactory";
 
 /**
- * Dahili API: Bizim Hesap cari ekstre.
+ * Dahili API: Seçili ERP cari ekstre.
  * GET /api/bizimhesap/abstract?customerId=<SmartStokCustomerId>
- *
- * Token yalnızca sunucuda okunur; istemciye gönderilmez.
  */
 export async function GET(request: Request) {
   const session = await auth();
@@ -27,7 +25,7 @@ export async function GET(request: Request) {
 
   const customer = await prisma.customer.findUnique({
     where: { id: customerId },
-    select: { bizimHesapId: true },
+    select: { bizimHesapId: true, vknTckn: true },
   });
 
   if (!customer) {
@@ -37,17 +35,20 @@ export async function GET(request: Request) {
     );
   }
 
-  if (!customer.bizimHesapId?.trim()) {
+  const identifier =
+    customer.bizimHesapId?.trim() || customer.vknTckn?.trim() || "";
+  if (!identifier) {
     return NextResponse.json(
       {
         error:
-          "Bu müşteri için Bizim Hesap cari kodu (bizimHesapId) tanımlı değil.",
+          "Bu müşteri için cari kod (bizimHesapId) veya VKN tanımlı değil.",
       },
       { status: 400 },
     );
   }
 
-  const result = await getCustomerAbstract(customer.bizimHesapId.trim());
+  const erp = await ErpFactory.getInstance();
+  const result = await erp.getCustomerAbstract(identifier);
 
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });

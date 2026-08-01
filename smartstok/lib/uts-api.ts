@@ -1,9 +1,9 @@
 /**
  * Merkezi ÜTS (Ürün Takip Sistemi) API köprüsü.
- * Token ve base URL .env üzerinden okunur.
+ * Token / firma no: CompanySettings → .env fallback.
  */
 
-const DEFAULT_UTS_API_URL = "https://utsuygulama.saglik.gov.tr/rest";
+import { resolveUtsCredentials } from "@/lib/services/app-credentials";
 
 export type FetchUtsApiOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -56,16 +56,8 @@ type UtsBildirimResponse = {
   MSJ?: UtsMessage[];
 };
 
-function getUtsConfig() {
-  const token = process.env.UTS_TOKEN?.trim() ?? "";
-  const firmNo = process.env.UTS_FIRM_NO?.trim() ?? "";
-  const apiUrl = (
-    process.env.UTS_API_URL?.trim() ||
-    process.env.UTS_BASE_URL?.trim() ||
-    DEFAULT_UTS_API_URL
-  ).replace(/\/$/, "");
-
-  return { token, firmNo, apiUrl };
+async function getUtsConfig() {
+  return resolveUtsCredentials();
 }
 
 /**
@@ -75,7 +67,7 @@ export async function fetchUtsApi<T = unknown>(
   path: string,
   options: FetchUtsApiOptions = {},
 ): Promise<FetchUtsApiResult<T>> {
-  const { token, apiUrl } = getUtsConfig();
+  const { token, apiUrl } = await getUtsConfig();
   const method = options.method ?? "GET";
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${apiUrl}${normalizedPath}`;
@@ -153,7 +145,7 @@ export async function fetchUtsKurumNoByVKN(vkn: string): Promise<string> {
     throw new Error("Geçerli bir VKN (10 hane) veya TCKN (11 hane) girin.");
   }
 
-  const { token, apiUrl } = getUtsConfig();
+  const { token, apiUrl } = await getUtsConfig();
   if (!token) {
     throw new Error(
       "ÜTS yapılandırması eksik: UTS_TOKEN tanımlı değil. Lütfen sistem yöneticisine bildirin.",
@@ -325,7 +317,7 @@ function isBildirimSuccess(data: UtsBildirimResponse | null): boolean {
 export async function sendAlmaBildirimi(
   payload: AlmaBildirimiPayload,
 ): Promise<SendAlmaBildirimiResult> {
-  const { token, apiUrl } = getUtsConfig();
+  const { token, apiUrl } = await getUtsConfig();
   const vermeBildirimId = payload.vermeBildirimId?.trim() ?? "";
 
   if (!token) {
@@ -439,7 +431,7 @@ export async function sendAlmaBildirimi(
 export async function sendVermeBildirimi(
   payload: VermeBildirimiPayload,
 ): Promise<{ success: true; notificationId?: string }> {
-  const { token, firmNo, apiUrl } = getUtsConfig();
+  const { token, firmNo, apiUrl } = await getUtsConfig();
   const gonderenKurumNo = payload.gonderenKurumNo?.trim() || firmNo;
   const alanKurumNo = payload.alanKurumNo?.trim() ?? "";
 

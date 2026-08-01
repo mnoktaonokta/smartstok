@@ -39,6 +39,12 @@ enum InventoryCountStatus {
   COMPLETED
 }
 
+enum ErpProvider {
+  BIZIMHESAP
+  ELOGO
+  PARASUT
+}
+
 model User {
   id                  String   @id @default(cuid())
   email               String   @unique
@@ -269,4 +275,40 @@ model InventoryCountItem {
   @@unique([countId, productId])
   @@index([countId])
   @@index([productId])
+}
+
+/** Tekil firma / entegrasyon ayarları (id = 1) */
+model CompanySettings {
+  id          Int         @id @default(1)
+  companyName String?
+  address     String?
+  vkn         String?
+  taxOffice   String?
+  phone       String?
+
+  aiApiKey  String?
+  utsFirmNo String?
+  utsToken  String?
+
+  erpProvider ErpProvider @default(BIZIMHESAP)
+
+  /** Bizim Hesap */
+  bhFirmId String?
+  bhToken  String?
+  bhApiKey String?
+
+  /** Paraşüt */
+  parasutCompanyId    String?
+  parasutClientId     String?
+  parasutClientSecret String?
+  parasutUsername     String?
+  parasutPassword     String?
+
+  /** e-Logo */
+  logoFirmNo   String?
+  logoApiKey   String?
+  logoUsername String?
+  logoPassword String?
+
+  updatedAt DateTime @updatedAt
 }

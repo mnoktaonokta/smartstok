@@ -41,8 +41,8 @@ export function AdminSyncCustomersButton() {
           <RefreshCw className="size-4" />
         )}
         {isPending
-          ? "Bizim Hesap’tan aktarılıyor…"
-          : "Bizim Hesap’tan Müşterileri Güncelle"}
+          ? "ERP’den aktarılıyor…"
+          : "ERP’den Müşterileri Güncelle"}
       </Button>
       {banner ? (
         <p
