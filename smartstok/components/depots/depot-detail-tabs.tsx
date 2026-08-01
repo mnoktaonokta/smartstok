@@ -110,13 +110,14 @@ export function DepotDetailTabs({
                 <TableHead>Adet</TableHead>
                 <TableHead>Karşı Depo</TableHead>
                 <TableHead>İşleyen</TableHead>
+                <TableHead>Talep Eden</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {movements.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={7}
                     className="py-10 text-center text-zinc-500"
                   >
                     Bu depo için hareket kaydı yok.
@@ -151,6 +152,7 @@ export function DepotDetailTabs({
                         {counterpart}
                       </TableCell>
                       <TableCell>{row.executedByName}</TableCell>
+                      <TableCell>{row.requestedByName ?? "—"}</TableCell>
                     </TableRow>
                   );
                 })

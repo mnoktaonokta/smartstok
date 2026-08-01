@@ -2,9 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Eye, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { CustomerActions } from "@/components/customers/customer-actions";
-import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -14,7 +13,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
 
 export type CustomerListRow = {
   id: string;
@@ -57,6 +55,8 @@ export function CustomersTable({
     });
   }, [customers, query]);
 
+  const colCount = canMutate ? 6 : 5;
+
   return (
     <div className="space-y-4">
       <div className="relative max-w-md">
@@ -78,20 +78,28 @@ export function CustomersTable({
             <TableHead>Temsilci</TableHead>
             <TableHead>Konsinye Deposu</TableHead>
             <TableHead>Telefon</TableHead>
-            <TableHead className="text-right">İşlem</TableHead>
+            {canMutate ? (
+              <TableHead className="text-right">İşlem</TableHead>
+            ) : null}
           </TableRow>
         </TableHeader>
         <TableBody>
           {customers.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="py-10 text-center text-zinc-500">
+              <TableCell
+                colSpan={colCount}
+                className="py-10 text-center text-zinc-500"
+              >
                 Henüz müşteri yok. Yeni müşteri ekleyin veya Admin panelinden
                 Bizim Hesap senkronu çalıştırın.
               </TableCell>
             </TableRow>
           ) : filtered.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="py-10 text-center text-zinc-500">
+              <TableCell
+                colSpan={colCount}
+                className="py-10 text-center text-zinc-500"
+              >
                 Aramanızla eşleşen müşteri bulunamadı.
               </TableCell>
             </TableRow>
@@ -120,19 +128,9 @@ export function CustomersTable({
                   )}
                 </TableCell>
                 <TableCell>{customer.phone ?? "—"}</TableCell>
-                <TableCell>
-                  <div className="flex items-center justify-end gap-1">
-                    <Link
-                      href={`/dashboard/customers/${customer.id}`}
-                      className={cn(
-                        buttonVariants({ variant: "ghost", size: "sm" }),
-                      )}
-                      aria-label="Detay"
-                    >
-                      <Eye className="size-4 text-blue-400" />
-                      <span className="hidden sm:inline">İncele</span>
-                    </Link>
-                    {canMutate ? (
+                {canMutate ? (
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-1">
                       <CustomerActions
                         canDelete={canDelete}
                         customer={{
@@ -146,9 +144,9 @@ export function CustomersTable({
                           utsInstitutionNumber: customer.utsInstitutionNumber,
                         }}
                       />
-                    ) : null}
-                  </div>
-                </TableCell>
+                    </div>
+                  </TableCell>
+                ) : null}
               </TableRow>
             ))
           )}
