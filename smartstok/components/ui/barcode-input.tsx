@@ -8,28 +8,28 @@ import {
   type BarcodeParseResult,
 } from "@/lib/utils/barcode-parser";
 
-/** Karakterler arası bu süreden kısaysa fiziksel okuyucu kabul edilir */
-const SCAN_GAP_MS = 55;
+/**
+ * Fiziksel okuyucu karakter aralığı (ms).
+ * Birçok tabanca 5–40ms; yavaş wedge’ler ~80–100ms olabilir.
+ */
+const SCAN_GAP_MS = 120;
+
+/** Burst bittikten sonra parse (Enter yoksa). Tarama ortasında kesilmemeli. */
+const SCAN_IDLE_MS = 450;
 
 type BarcodeInputProps = Omit<
   React.ComponentProps<"input">,
   "value" | "onChange" | "onKeyDown" | "onPaste"
 > & {
   value: string;
-  /** Input’ta gösterilecek / saklanacak değer (EAN veya manuel metin) */
   onValueChange: (value: string) => void;
-  /** GS1 ayrıştırıldığında (lot/SKT vb.) */
   onParsed?: (parsed: BarcodeParseResult) => void;
-  /**
-   * Enter: okuyucu string sonu.
-   * Varsayılan form submit engellenir; parsed sonuç verilir.
-   */
   onEnter?: (parsed: BarcodeParseResult) => void;
 };
 
 /**
- * Fiziksel barkod okuyucu (klavye wedge) + manuel giriş.
- * Karekod ham string buffer’da tutulur; ekranda yalnızca kısa EAN görünür.
+ * Barkod / karekod alanı.
+ * Okuyucu ham GS1’i input’a yazdırmaz; buffer’da tutup EAN’a çevirir.
  */
 export const BarcodeInput = React.forwardRef<HTMLInputElement, BarcodeInputProps>(
   function BarcodeInput(
@@ -38,15 +38,17 @@ export const BarcodeInput = React.forwardRef<HTMLInputElement, BarcodeInputProps
   ) {
     const bufferRef = React.useRef("");
     const lastKeyAtRef = React.useRef(0);
-    const pendingCharRef = React.useRef<string | null>(null);
-    const flushTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
+    const scanningRef = React.useRef(false);
+    const idleTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
       null,
     );
+    const valueRef = React.useRef(value);
+    valueRef.current = value;
 
-    function clearFlushTimer() {
-      if (flushTimerRef.current) {
-        clearTimeout(flushTimerRef.current);
-        flushTimerRef.current = null;
+    function clearIdleTimer() {
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
       }
     }
 
@@ -55,42 +57,69 @@ export const BarcodeInput = React.forwardRef<HTMLInputElement, BarcodeInputProps
       onParsed?.(parsed);
     }
 
-    function showLiveFromBuffer() {
-      const live = parseBarcode(bufferRef.current);
+    /** Ekranda asla ham GS1 gösterme */
+    function syncDisplayFromBuffer() {
+      const buf = bufferRef.current;
+      if (!buf) return;
+      const live = parseBarcode(buf);
       if (live.type === "QR" && live.barkod) {
         onValueChange(live.barkod);
+        return;
+      }
+      if (looksLikeGs1Payload(buf) || buf.length > 14) {
+        // Henüz tam parse yok ama uzun/GS1 — hamı gizle
+        onValueChange(live.barkod && live.barkod.length <= 14 ? live.barkod : "");
       }
     }
 
-    function flushBuffer() {
-      const raw = bufferRef.current;
-      if (!raw) return;
+    function finalizeBuffer(triggerEnter: boolean) {
+      clearIdleTimer();
+      const raw = bufferRef.current || valueRef.current;
       bufferRef.current = "";
-      pendingCharRef.current = null;
-      clearFlushTimer();
-      applyParsed(parseBarcode(raw));
+      scanningRef.current = false;
+      if (!raw.trim()) {
+        if (triggerEnter) onEnter?.(parseBarcode(""));
+        return;
+      }
+      const parsed = parseBarcode(raw);
+      applyParsed(parsed);
+      if (triggerEnter) onEnter?.(parsed);
     }
 
-    function scheduleFlush() {
-      clearFlushTimer();
-      flushTimerRef.current = setTimeout(() => {
-        flushBuffer();
-      }, 90);
+    function scheduleIdleFinalize() {
+      clearIdleTimer();
+      idleTimerRef.current = setTimeout(() => {
+        if (bufferRef.current) {
+          finalizeBuffer(false);
+        } else {
+          scanningRef.current = false;
+        }
+      }, SCAN_IDLE_MS);
     }
 
-    function beginScanBuffer(chars: string) {
-      bufferRef.current = chars;
-      pendingCharRef.current = null;
-      // İlk karakter zaten value’da göründüyse temizle; GS1’de kısa EAN göster
-      showLiveFromBuffer();
-      if (!looksLikeGs1Payload(chars) && parseBarcode(chars).type !== "QR") {
-        // Henüz EAN/GS1 belli değil — ham metni gösterme
+    function appendScanChar(char: string) {
+      scanningRef.current = true;
+      bufferRef.current += char;
+      syncDisplayFromBuffer();
+      scheduleIdleFinalize();
+    }
+
+    function beginOrContinueScan(char: string, gap: number) {
+      // Burst’ün 2. karakteri: ilk karakter value’ya sızmış olabilir
+      if (
+        bufferRef.current.length === 0 &&
+        gap < SCAN_GAP_MS &&
+        valueRef.current.length > 0 &&
+        valueRef.current.length <= 3 &&
+        !looksLikeGs1Payload(valueRef.current)
+      ) {
+        bufferRef.current = valueRef.current;
         onValueChange("");
       }
-      scheduleFlush();
+      appendScanChar(char);
     }
 
-    React.useEffect(() => () => clearFlushTimer(), []);
+    React.useEffect(() => () => clearIdleTimer(), []);
 
     return (
       <Input
@@ -98,47 +127,74 @@ export const BarcodeInput = React.forwardRef<HTMLInputElement, BarcodeInputProps
         ref={ref}
         value={value}
         autoComplete="off"
+        spellCheck={false}
         onPaste={(e) => {
           const text = e.clipboardData.getData("text") ?? "";
-          if (looksLikeGs1Payload(text) || text.replace(/\s/g, "").length > 14) {
-            e.preventDefault();
-            bufferRef.current = "";
-            pendingCharRef.current = null;
-            clearFlushTimer();
-            applyParsed(parseBarcode(text));
-          }
+          if (!text.trim()) return;
+          e.preventDefault();
+          bufferRef.current = "";
+          scanningRef.current = false;
+          clearIdleTimer();
+          applyParsed(parseBarcode(text));
         }}
         onChange={(e) => {
           const raw = e.target.value;
-          if (looksLikeGs1Payload(raw)) {
+
+          // Güvenlik ağı: ham GS1 / uzun payload bir şekilde sızdıysa ez
+          if (
+            looksLikeGs1Payload(raw) ||
+            (raw.length > 14 && /01\d{13,}/.test(raw.replace(/\s/g, "")))
+          ) {
             bufferRef.current = "";
-            pendingCharRef.current = null;
-            clearFlushTimer();
+            scanningRef.current = false;
+            clearIdleTimer();
             applyParsed(parseBarcode(raw));
             return;
           }
-          // Manuel yavaş yazım (okuyucu buffer’ı yok)
-          if (bufferRef.current.length === 0) {
-            pendingCharRef.current = null;
-            clearFlushTimer();
-            onValueChange(raw);
+
+          // Uzun metin ama henüz looksLike değil — yine parse dene
+          if (raw.length > 20) {
+            const parsed = parseBarcode(raw);
+            if (parsed.type === "QR" && parsed.barkod) {
+              bufferRef.current = "";
+              scanningRef.current = false;
+              clearIdleTimer();
+              applyParsed(parsed);
+              return;
+            }
           }
+
+          // Tarama buffer’ı aktifken onChange’i yok say (React controlled yarışı)
+          if (scanningRef.current || bufferRef.current.length > 0) {
+            return;
+          }
+
+          onValueChange(raw);
         }}
         onKeyDown={(e) => {
-          const now = Date.now();
-          const gap = now - lastKeyAtRef.current;
-          lastKeyAtRef.current = now;
-
           if (e.key === "Enter") {
             e.preventDefault();
             e.stopPropagation();
-            clearFlushTimer();
-            const raw = bufferRef.current || value;
+            finalizeBuffer(true);
+            return;
+          }
+
+          if (e.key === "Escape") {
             bufferRef.current = "";
-            pendingCharRef.current = null;
-            const parsed = parseBarcode(raw);
-            applyParsed(parsed);
-            onEnter?.(parsed);
+            scanningRef.current = false;
+            clearIdleTimer();
+            onValueChange("");
+            return;
+          }
+
+          if (e.key === "Backspace" || e.key === "Delete") {
+            if (scanningRef.current || bufferRef.current.length > 0) {
+              e.preventDefault();
+              bufferRef.current = "";
+              scanningRef.current = false;
+              clearIdleTimer();
+              onValueChange("");
+            }
             return;
           }
 
@@ -151,31 +207,31 @@ export const BarcodeInput = React.forwardRef<HTMLInputElement, BarcodeInputProps
             return;
           }
 
-          // Aktif okuyucu buffer’ı
-          if (bufferRef.current.length > 0) {
+          const now = Date.now();
+          const gap = now - lastKeyAtRef.current;
+          lastKeyAtRef.current = now;
+
+          const inBurst =
+            scanningRef.current ||
+            bufferRef.current.length > 0 ||
+            gap < SCAN_GAP_MS;
+
+          // GS1 neredeyse her zaman '0' ile başlar — boş alandan itibaren yakala
+          const gs1Start =
+            !scanningRef.current &&
+            bufferRef.current.length === 0 &&
+            valueRef.current === "" &&
+            e.key === "0";
+
+          if (inBurst || gs1Start) {
             e.preventDefault();
-            bufferRef.current += e.key;
-            showLiveFromBuffer();
-            scheduleFlush();
+            e.stopPropagation();
+            beginOrContinueScan(e.key, gap);
             return;
           }
 
-          // İkinci (ve sonraki) hızlı karakter → tarama başladı
-          if (pendingCharRef.current !== null && gap < SCAN_GAP_MS) {
-            e.preventDefault();
-            beginScanBuffer(pendingCharRef.current + e.key);
-            return;
-          }
-
-          // Boş alanda GS1’in tipik ilk karakteri (0) — hemen buffer’a al
-          if (value === "" && e.key === "0") {
-            e.preventDefault();
-            beginScanBuffer(e.key);
-            return;
-          }
-
-          // İlk / yavaş karakter: onChange’e bırak, hızlı devam için işaretle
-          pendingCharRef.current = e.key;
+          // Yavaş manuel yazım — tarama değil; ilk karakteri de buffer’a alma
+          // (bir sonraki hızlı char gelirse inBurst value’dan geri toplar)
         }}
       />
     );

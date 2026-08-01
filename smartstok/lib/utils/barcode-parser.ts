@@ -28,8 +28,10 @@ export function looksLikeGs1Payload(raw: string): boolean {
   const cleaned = String(raw ?? "").replace(/[\s\u001d]/g, "");
   if (!cleaned) return false;
   if (cleaned.includes("(01)")) return true;
-  if (/^01\d{14}/.test(cleaned)) return true;
-  if (cleaned.length > 14 && cleaned.startsWith("01")) return true;
+  if (/01\d{14}/.test(cleaned)) return true;
+  // Kısmi GS1: 01 ile başlayıp 14+ karakter (GTIN henüz tamamlanmamış olabilir)
+  if (cleaned.startsWith("01") && cleaned.length > 14) return true;
+  if (cleaned.length > 20 && cleaned.includes("01")) return true;
   return false;
 }
 
@@ -127,6 +129,7 @@ function parseContinuousGs1(raw: string): BarcodeParseResult | null {
 
 /**
  * Gelen string'i EAN veya GS1 Karekod olarak ayrıştırır.
+ * GS1 gövdesi string ortasında da olsa (prefix sızıntısı) yakalanır.
  */
 export function parseBarcode(raw: string): BarcodeParseResult {
   const original = String(raw ?? "").trim();
@@ -151,9 +154,22 @@ export function parseBarcode(raw: string): BarcodeParseResult {
     if (paren?.barkod) return paren;
   }
 
-  if (/^01\d{14}/.test(cleaned)) {
-    const cont = parseContinuousGs1(cleaned);
+  // Başta veya ortada sürekli GS1 (01 + 14 hane GTIN)
+  const gs1Start = cleaned.search(/01\d{14}/);
+  if (gs1Start >= 0) {
+    const cont = parseContinuousGs1(cleaned.slice(gs1Start));
     if (cont?.barkod) return cont;
+  }
+
+  // Çok uzun sayısal/alfa payload — yine de GTIN dene
+  if (cleaned.length > 14) {
+    const gtinEmbedded = cleaned.match(/01(\d{14})/);
+    if (gtinEmbedded) {
+      return {
+        type: "QR",
+        barkod: normalizeGtinToEan(gtinEmbedded[1]),
+      };
+    }
   }
 
   return { type: "EAN", barkod: original };
