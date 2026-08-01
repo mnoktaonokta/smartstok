@@ -196,7 +196,7 @@ export function ProductsTable({
             checked={showInactive}
             onChange={(e) => setShowInactive(e.target.checked)}
           />
-          Pasif ürünleri göster
+          Pasif ürünleri de göster
         </label>
         <div className="sm:ml-auto">
           {canMutate ? (

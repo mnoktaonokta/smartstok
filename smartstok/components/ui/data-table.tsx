@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { extractBarcodeOnly } from "@/lib/utils/barcode-parser";
 
 export type DataTableColumn<T> = {
   id: string;
@@ -72,7 +73,7 @@ export function DataTable<T>({
           <Input
             value={query}
             onChange={(e) => {
-              setQuery(e.target.value);
+              setQuery(extractBarcodeOnly(e.target.value));
               setPage(0);
             }}
             placeholder={searchPlaceholder}

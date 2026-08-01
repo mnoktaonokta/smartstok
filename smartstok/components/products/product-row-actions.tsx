@@ -22,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { extractBarcodeOnly } from "@/lib/utils/barcode-parser";
 
 export function ProductRowActions({
   product,
@@ -232,7 +233,10 @@ export function ProductRowActions({
               <Input
                 id={`edit-barcode-${product.id}`}
                 value={form.barcode}
-                onChange={(e) => setField("barcode", e.target.value)}
+                onChange={(e) =>
+                  setField("barcode", extractBarcodeOnly(e.target.value))
+                }
+                placeholder="Barkod veya karekod okutun…"
                 disabled={isPending}
               />
             </div>

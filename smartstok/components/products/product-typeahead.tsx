@@ -6,6 +6,10 @@ import {
   type ProductSearchHit,
 } from "@/lib/actions/products";
 import { searchProductCatalogAction } from "@/lib/actions/catalog";
+import {
+  parseBarcode,
+  type BarcodeParseResult,
+} from "@/lib/utils/barcode-parser";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +17,7 @@ export function ProductTypeahead({
   locationId,
   mode = "stock",
   onSelect,
+  onParsed,
   placeholder = "Referans, ürün adı veya barkod…",
   selectedLabel,
   disabled = false,
@@ -21,6 +26,8 @@ export function ProductTypeahead({
   /** stock: stoklu ürünler | catalog: tüm ürün tanımları */
   mode?: "stock" | "catalog";
   onSelect: (product: ProductSearchHit) => void;
+  /** GS1 karekod ayrıştırıldığında (Mal Kabul’de lot/SKT doldurmak için) */
+  onParsed?: (parsed: BarcodeParseResult) => void;
   placeholder?: string;
   selectedLabel?: string | null;
   disabled?: boolean;
@@ -40,6 +47,17 @@ export function ProductTypeahead({
       setOpen(false);
     }
   }, [selectedLabel]);
+
+  function handleInputChange(raw: string) {
+    const parsed = parseBarcode(raw);
+    // Karekod ise uzun metni göstermeden sadece EAN’ı yaz
+    if (parsed.type === "QR" && parsed.barkod) {
+      setQuery(parsed.barkod);
+      onParsed?.(parsed);
+      return;
+    }
+    setQuery(raw);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -85,7 +103,7 @@ export function ProductTypeahead({
     <div className="relative">
       <Input
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => handleInputChange(e.target.value)}
         onFocus={() => results.length > 0 && setOpen(true)}
         placeholder={placeholder}
         autoComplete="off"

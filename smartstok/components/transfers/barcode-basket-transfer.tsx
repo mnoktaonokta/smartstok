@@ -22,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { extractBarcodeOnly } from "@/lib/utils/barcode-parser";
 
 type BasketLine = {
   key: string;
@@ -131,7 +132,7 @@ export function BarcodeBasketTransfer({
     setErrorAlert(null);
     setSuccess(null);
 
-    const code = barcode.trim();
+    const code = extractBarcodeOnly(barcode).trim();
     if (!code) return;
 
     if (!fromLocationId || !toLocationId) {
@@ -300,8 +301,8 @@ export function BarcodeBasketTransfer({
           ref={inputRef}
           id="barcode-scan"
           value={barcode}
-          onChange={(e) => setBarcode(e.target.value)}
-          placeholder="Barkodu okutun veya yazıp Enter’a basın…"
+          onChange={(e) => setBarcode(extractBarcodeOnly(e.target.value))}
+          placeholder="Barkod veya karekod okutun…"
           className="h-14 font-mono text-lg tracking-wide"
           autoComplete="off"
           disabled={scanning || isPending || !fromLocationId}

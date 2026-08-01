@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { extractBarcodeOnly } from "@/lib/utils/barcode-parser";
 
 const emptyForm = {
   referenceCode: "",
@@ -174,8 +175,10 @@ export function AddProductDialog({
               <Input
                 id="barcode"
                 value={form.barcode}
-                onChange={(e) => setField("barcode", e.target.value)}
-                placeholder="869…"
+                onChange={(e) =>
+                  setField("barcode", extractBarcodeOnly(e.target.value))
+                }
+                placeholder="Barkod veya karekod okutun…"
                 disabled={isPending}
               />
             </div>

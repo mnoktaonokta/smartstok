@@ -21,6 +21,7 @@ import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { sktToDateInputValue } from "@/lib/utils/barcode-parser";
 import {
   Dialog,
   DialogContent,
@@ -432,12 +433,17 @@ export function InboundReceiptWorkspace({
               <ProductTypeahead
                 mode="catalog"
                 onSelect={(p) => setPendingProduct(p)}
+                onParsed={(parsed) => {
+                  if (parsed.lot) setLot(parsed.lot);
+                  const dateVal = sktToDateInputValue(parsed.skt);
+                  if (dateVal) setExpiry(dateVal);
+                }}
                 selectedLabel={
                   pendingProduct
                     ? `${pendingProduct.referenceCode} · ${pendingProduct.name}`
                     : null
                 }
-                placeholder="Barkod okutun veya referans yazın…"
+                placeholder="Barkod veya karekod okutun…"
               />
             </div>
             <div className="space-y-2">
