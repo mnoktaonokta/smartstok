@@ -65,11 +65,17 @@ export const authConfig = {
       const isLoggedIn = !!auth?.user;
       const isLoginPage = pathname.startsWith("/login");
       const isChangePasswordPage = pathname.startsWith("/change-password");
+      const isMasterUnlock = pathname.startsWith("/master-unlock");
       const isAuthApi = pathname.startsWith("/api/auth");
       const isChangePasswordApi = pathname.startsWith("/api/change-password");
       const isUnauthorizedPage = pathname.startsWith("/dashboard/unauthorized");
 
       if (isAuthApi || isChangePasswordApi) {
+        return true;
+      }
+
+      // Gizli lisans paneli — menüde yok; oturum zorunlu değil
+      if (isMasterUnlock) {
         return true;
       }
 

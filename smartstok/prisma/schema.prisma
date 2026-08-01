@@ -310,5 +310,8 @@ model CompanySettings {
   logoUsername String?
   logoPassword String?
 
+  /** SaaS lisans bitiş tarihi — geçtiyse dashboard kilitlenir */
+  licenseEndDate DateTime?
+
   updatedAt DateTime @updatedAt
 }

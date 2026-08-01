@@ -1,6 +1,23 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
+import { LicenseLockScreen } from "@/components/license/license-lock-screen";
+import { getLicenseStatus } from "@/lib/license";
+
+function buildWhatsappUrl(): string | null {
+  const raw =
+    process.env.LICENSE_WHATSAPP?.trim() ||
+    process.env.NEXT_PUBLIC_LICENSE_WHATSAPP?.trim() ||
+    "";
+  if (!raw) return null;
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return null;
+  const text = encodeURIComponent(
+    "Merhaba, SmartStok lisans sürem doldu. Yenileme için yardımcı olur musunuz?",
+  );
+  return `https://wa.me/${digits}?text=${text}`;
+}
 
 export default async function DashboardLayout({
   children,
@@ -11,6 +28,11 @@ export default async function DashboardLayout({
 
   if (!session?.user) {
     redirect("/login");
+  }
+
+  const license = await getLicenseStatus();
+  if (!license.valid) {
+    return <LicenseLockScreen whatsappUrl={buildWhatsappUrl()} />;
   }
 
   return (

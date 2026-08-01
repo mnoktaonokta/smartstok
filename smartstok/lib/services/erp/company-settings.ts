@@ -5,6 +5,12 @@ import type { CompanySettings } from "@/app/generated/prisma/client";
 
 const SINGLETON_ID = 1;
 
+function defaultLicenseEndDate() {
+  const end = new Date();
+  end.setFullYear(end.getFullYear() + 1);
+  return end;
+}
+
 /** Env’den ilk kayıt için varsayılanlar (geçiş dönemi). */
 function defaultsFromEnv() {
   return {
@@ -18,6 +24,7 @@ function defaultsFromEnv() {
       process.env.OPENAI_API_KEY?.trim() ||
       null,
     erpProvider: "BIZIMHESAP" as const,
+    licenseEndDate: defaultLicenseEndDate(),
   };
 }
 
@@ -26,7 +33,16 @@ export async function getOrCreateCompanySettings(): Promise<CompanySettings> {
   const existing = await prisma.companySettings.findUnique({
     where: { id: SINGLETON_ID },
   });
-  if (existing) return existing;
+  if (existing) {
+    // Eski kayıtlarda lisans tarihi yoksa 1 yıl tanımla (ilk migration)
+    if (!existing.licenseEndDate) {
+      return prisma.companySettings.update({
+        where: { id: SINGLETON_ID },
+        data: { licenseEndDate: defaultLicenseEndDate() },
+      });
+    }
+    return existing;
+  }
 
   return prisma.companySettings.create({
     data: {
