@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ArrowLeftRight,
+  ClipboardList,
   FileText,
   LayoutDashboard,
   LogOut,
@@ -32,6 +33,7 @@ const navItems = [
   { href: "/dashboard/admin", label: "Admin", icon: Shield, adminOnly: true },
   { href: "/dashboard/products", label: "Ürünler", icon: Package },
   { href: "/dashboard/malkabul", label: "Mal Kabul", icon: PackagePlus },
+  { href: "/dashboard/sayim", label: "Stok Sayımı", icon: ClipboardList },
   { href: "/dashboard/depots", label: "Depolar", icon: Warehouse },
   { href: "/dashboard/customers", label: "Müşteriler", icon: Users },
   { href: "/dashboard/transfers", label: "Transfer Yapma", icon: ArrowLeftRight },

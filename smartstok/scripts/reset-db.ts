@@ -81,6 +81,10 @@ veya:
     console.log("→ InboundReceipt siliniyor…");
     const inbound = await prisma.inboundReceipt.deleteMany({});
 
+    console.log("→ InventoryCountItem / InventoryCount siliniyor…");
+    const countItems = await prisma.inventoryCountItem.deleteMany({});
+    const counts = await prisma.inventoryCount.deleteMany({});
+
     console.log("→ Product siliniyor…");
     const products = await prisma.product.deleteMany({});
 
@@ -117,6 +121,8 @@ veya:
     console.log(`  Visit            : ${visits.count}`);
     console.log(`  Task             : ${tasks.count}`);
     console.log(`  InboundReceipt   : ${inbound.count}`);
+    console.log(`  InventoryCountItem: ${countItems.count}`);
+    console.log(`  InventoryCount   : ${counts.count}`);
     console.log(`  Product          : ${products.count}`);
     console.log(`  Location (klinik): ${clinicDepots.count}`);
     console.log(`  Customer         : ${customers.count}`);

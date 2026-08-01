@@ -34,6 +34,11 @@ enum InboundReceiptStatus {
   DISCREPANCY
 }
 
+enum InventoryCountStatus {
+  DRAFT
+  COMPLETED
+}
+
 model User {
   id                  String   @id @default(cuid())
   email               String   @unique
@@ -72,7 +77,8 @@ model Product {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  stockItems StockItem[]
+  stockItems          StockItem[]
+  inventoryCountItems InventoryCountItem[]
 }
 
 model Customer {
@@ -234,4 +240,33 @@ model InboundReceipt {
   @@index([status])
   @@index([createdAt])
   @@index([createdById])
+}
+
+/** Merkez depo stok sayım fişi */
+model InventoryCount {
+  id        String                @id @default(cuid())
+  status    InventoryCountStatus  @default(DRAFT)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  items InventoryCountItem[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model InventoryCountItem {
+  id               String         @id @default(cuid())
+  countId          String
+  count            InventoryCount @relation(fields: [countId], references: [id], onDelete: Cascade)
+  productId        String
+  product          Product        @relation(fields: [productId], references: [id])
+  /** Sayım başındaki sistem stoku (merkez depo) */
+  expectedQuantity Int
+  /** Fiziki sayılan miktar */
+  countedQuantity  Int            @default(0)
+
+  @@unique([countId, productId])
+  @@index([countId])
+  @@index([productId])
 }

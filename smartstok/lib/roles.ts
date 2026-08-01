@@ -25,6 +25,7 @@ export const NAV_PATH_ORDER = [
   "/dashboard/admin",
   "/dashboard/products",
   "/dashboard/malkabul",
+  "/dashboard/sayim",
   "/dashboard/depots",
   "/dashboard/customers",
   "/dashboard/transfers",
@@ -55,6 +56,7 @@ const ROLE_PAGE_PREFIXES: Record<Exclude<UserRole, "ADMIN">, string[]> = {
   DEPO: [
     "/dashboard",
     "/dashboard/malkabul",
+    "/dashboard/sayim",
     "/dashboard/transfers",
     "/dashboard/products",
     "/dashboard/depots",
@@ -62,6 +64,7 @@ const ROLE_PAGE_PREFIXES: Record<Exclude<UserRole, "ADMIN">, string[]> = {
   OBSERVER: [
     "/dashboard",
     "/dashboard/products",
+    "/dashboard/sayim",
     "/dashboard/depots",
     "/dashboard/customers",
     "/dashboard/invoices",

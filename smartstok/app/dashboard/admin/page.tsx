@@ -8,7 +8,6 @@ import { AdminUserRowActions } from "@/components/admin/admin-user-row-actions";
 import { AdminSyncCustomersButton } from "@/components/admin/admin-sync-customers-button";
 import { AdminCategoryStockCard } from "@/components/admin/admin-category-stock-card";
 import { AdminProductImport } from "@/components/admin/admin-product-import";
-import { AdminStockCountModal } from "@/components/admin/admin-stock-count-modal";
 import { AdminExportStocksButton } from "@/components/admin/admin-export-stocks-button";
 import {
   Card,
@@ -54,12 +53,11 @@ export default async function AdminPage() {
             Admin Kontrol Paneli
           </h1>
           <p className="mt-2 text-sm text-zinc-400">
-            Kullanıcı, müşteri senkronu, toplu ürün aktarımı ve barkod sayım.
+            Kullanıcı, müşteri senkronu ve toplu ürün aktarımı.
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
           <AdminExportStocksButton />
-          <AdminStockCountModal />
         </div>
       </div>
 
