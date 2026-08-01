@@ -51,7 +51,7 @@ export function InventoryCountWorkspace({
   const [items, setItems] = useState<InventoryCountLine[]>(initial.items);
   const [status, setStatus] = useState(initial.status);
   const [barcode, setBarcode] = useState("");
-  const [filter, setFilter] = useState<"all" | "diff" | "short" | "over">(
+  const [filter, setFilter] = useState<"all" | "matched" | "short" | "over">(
     "all",
   );
   const [message, setMessage] = useState<string | null>(null);
@@ -88,7 +88,7 @@ export function InventoryCountWorkspace({
   const visible = useMemo(() => {
     return items.filter((i) => {
       const d = i.countedQuantity - i.expectedQuantity;
-      if (filter === "diff") return d !== 0;
+      if (filter === "matched") return d === 0;
       if (filter === "short") return d < 0;
       if (filter === "over") return d > 0;
       return true;
@@ -275,7 +275,7 @@ export function InventoryCountWorkspace({
         {(
           [
             ["all", "Tümü"],
-            ["diff", "Farklılar"],
+            ["matched", "Aynı olanlar"],
             ["short", "Eksikler"],
             ["over", "Fazlalar"],
           ] as const
