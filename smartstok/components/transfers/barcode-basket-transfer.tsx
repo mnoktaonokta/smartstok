@@ -9,7 +9,7 @@ import {
   type BarcodeScanLot,
 } from "@/lib/actions/barcode-transfer";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { BarcodeInput } from "@/components/ui/barcode-input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { formatRoles } from "@/lib/roles";
@@ -22,7 +22,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { extractBarcodeOnly } from "@/lib/utils/barcode-parser";
 
 type BasketLine = {
   key: string;
@@ -127,12 +126,11 @@ export function BarcodeBasketTransfer({
     });
   }
 
-  function handleScanSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function handleScan(codeRaw: string) {
     setErrorAlert(null);
     setSuccess(null);
 
-    const code = extractBarcodeOnly(barcode).trim();
+    const code = codeRaw.trim();
     if (!code) return;
 
     if (!fromLocationId || !toLocationId) {
@@ -295,22 +293,22 @@ export function BarcodeBasketTransfer({
         </div>
       </div>
 
-      <form onSubmit={handleScanSubmit} className="space-y-2">
+      <div className="space-y-2">
         <Label htmlFor="barcode-scan">Barkod Okut</Label>
-        <Input
+        <BarcodeInput
           ref={inputRef}
           id="barcode-scan"
           value={barcode}
-          onChange={(e) => setBarcode(extractBarcodeOnly(e.target.value))}
+          onValueChange={setBarcode}
+          onEnter={(parsed) => handleScan(parsed.barkod)}
           placeholder="Barkod veya karekod okutun…"
           className="h-14 font-mono text-lg tracking-wide"
-          autoComplete="off"
           disabled={scanning || isPending || !fromLocationId}
         />
         <p className="text-xs text-zinc-500">
           Okuyucu Enter gönderir; form submit engellenir, arama tetiklenir.
         </p>
-      </form>
+      </div>
 
       {errorAlert ? (
         <div

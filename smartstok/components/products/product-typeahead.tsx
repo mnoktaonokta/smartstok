@@ -6,11 +6,8 @@ import {
   type ProductSearchHit,
 } from "@/lib/actions/products";
 import { searchProductCatalogAction } from "@/lib/actions/catalog";
-import {
-  parseBarcode,
-  type BarcodeParseResult,
-} from "@/lib/utils/barcode-parser";
-import { Input } from "@/components/ui/input";
+import type { BarcodeParseResult } from "@/lib/utils/barcode-parser";
+import { BarcodeInput } from "@/components/ui/barcode-input";
 import { cn } from "@/lib/utils";
 
 export function ProductTypeahead({
@@ -47,17 +44,6 @@ export function ProductTypeahead({
       setOpen(false);
     }
   }, [selectedLabel]);
-
-  function handleInputChange(raw: string) {
-    const parsed = parseBarcode(raw);
-    // Karekod ise uzun metni göstermeden sadece EAN’ı yaz
-    if (parsed.type === "QR" && parsed.barkod) {
-      setQuery(parsed.barkod);
-      onParsed?.(parsed);
-      return;
-    }
-    setQuery(raw);
-  }
 
   useEffect(() => {
     let cancelled = false;
@@ -101,12 +87,16 @@ export function ProductTypeahead({
 
   return (
     <div className="relative">
-      <Input
+      <BarcodeInput
         value={query}
-        onChange={(e) => handleInputChange(e.target.value)}
+        onValueChange={setQuery}
+        onParsed={onParsed}
+        onEnter={(parsed) => {
+          // Enter: aramayı kısa barkodla sürdür / tek sonuç varsa seç
+          if (parsed.barkod) setQuery(parsed.barkod);
+        }}
         onFocus={() => results.length > 0 && setOpen(true)}
         placeholder={placeholder}
-        autoComplete="off"
         disabled={disabled}
       />
       {loading ? (

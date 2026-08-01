@@ -23,6 +23,16 @@ export function sktToDateInputValue(skt: string | undefined): string {
   return `${m[3]}-${m[2]}-${m[1]}`;
 }
 
+/** Ham metin GS1 / uzun karekod gibi mi? */
+export function looksLikeGs1Payload(raw: string): boolean {
+  const cleaned = String(raw ?? "").replace(/[\s\u001d]/g, "");
+  if (!cleaned) return false;
+  if (cleaned.includes("(01)")) return true;
+  if (/^01\d{14}/.test(cleaned)) return true;
+  if (cleaned.length > 14 && cleaned.startsWith("01")) return true;
+  return false;
+}
+
 /** Yalnızca barkod numarasını çıkarır (lot/SKT yok sayılır). */
 export function extractBarcodeOnly(raw: string): string {
   return parseBarcode(raw).barkod;
@@ -35,7 +45,6 @@ function formatSktFromProductionYymmdd(yymmdd: string): string | undefined {
   const dd = Number(yymmdd.slice(4, 6));
   if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return undefined;
 
-  // 00–79 → 2000–2079, 80–99 → 1980–1999 (GS1 yaygın kuralı)
   const fullYear = yy >= 80 ? 1900 + yy : 2000 + yy;
   const sktYear = fullYear + 5;
 
@@ -73,11 +82,10 @@ function parseParenthesesGs1(raw: string): BarcodeParseResult | null {
 }
 
 /**
- * Sürekli GS1 (FNC1 yok): 01(14) … 11(6) … 10(variable)
- * Örnek: 01086850596032221125111910P25031119M0100
+ * Sürekli GS1: 01(14) … 11(6) … 10(variable)
+ * Kısmi okumada (yalnızca 01+GTIN) da EAN döner.
  */
 function parseContinuousGs1(raw: string): BarcodeParseResult | null {
-  // 01 + 14 hane zorunlu çekirdek
   const head = raw.match(/^01(\d{14})(.*)$/);
   if (!head) return null;
 
@@ -86,17 +94,14 @@ function parseContinuousGs1(raw: string): BarcodeParseResult | null {
   let lot: string | undefined;
   let skt: string | undefined;
 
-  // AI 11 — üretim tarihi (6 hane)
   const ai11 = rest.match(/^11(\d{6})(.*)$/);
   if (ai11) {
     skt = formatSktFromProductionYymmdd(ai11[1]);
     rest = ai11[2] ?? "";
   }
 
-  // AI 17 — doğrudan SKT (varsa, 11'den sonra veya yerine)
   const ai17 = rest.match(/^17(\d{6})(.*)$/);
   if (ai17) {
-    // Doğrudan son kullanma: YYMMDD → DD.MM.YYYY (+0 yıl)
     const yy = Number(ai17[1].slice(0, 2));
     const mm = ai17[1].slice(2, 4);
     const dd = ai17[1].slice(4, 6);
@@ -105,7 +110,6 @@ function parseContinuousGs1(raw: string): BarcodeParseResult | null {
     rest = ai17[2] ?? "";
   }
 
-  // AI 10 — lot (kalan)
   const ai10 = rest.match(/^10(.+)$/);
   if (ai10) {
     lot = ai10[1].trim() || undefined;
@@ -130,10 +134,8 @@ export function parseBarcode(raw: string): BarcodeParseResult {
     return { type: "EAN", barkod: "" };
   }
 
-  // GS1 / EAN analizi için boşluk ve FNC1 (GS) temizlenir
   const cleaned = original.replace(/[\s\u001d]/g, "");
 
-  // Saf 13–14 haneli sayı → EAN
   if (/^\d{13,14}$/.test(cleaned)) {
     return {
       type: "EAN",
@@ -149,11 +151,10 @@ export function parseBarcode(raw: string): BarcodeParseResult {
     if (paren?.barkod) return paren;
   }
 
-  if (cleaned.startsWith("01") && cleaned.length > 16) {
+  if (/^01\d{14}/.test(cleaned)) {
     const cont = parseContinuousGs1(cleaned);
     if (cont?.barkod) return cont;
   }
 
-  // Tanınmayan metin: orijinal (trim) haliyle bırak — ürün adı araması bozulmasın
   return { type: "EAN", barkod: original };
 }

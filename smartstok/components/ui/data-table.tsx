@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { BarcodeInput } from "@/components/ui/barcode-input";
 import {
   Table,
   TableBody,
@@ -13,7 +13,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { extractBarcodeOnly } from "@/lib/utils/barcode-parser";
 
 export type DataTableColumn<T> = {
   id: string;
@@ -70,10 +69,10 @@ export function DataTable<T>({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative max-w-sm flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-zinc-500" />
-          <Input
+          <BarcodeInput
             value={query}
-            onChange={(e) => {
-              setQuery(extractBarcodeOnly(e.target.value));
+            onValueChange={(v) => {
+              setQuery(v);
               setPage(0);
             }}
             placeholder={searchPlaceholder}

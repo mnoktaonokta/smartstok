@@ -12,6 +12,7 @@ import {
 import { CATEGORY_OPTIONS } from "@/lib/categories";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { BarcodeInput } from "@/components/ui/barcode-input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import {
@@ -22,7 +23,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { extractBarcodeOnly } from "@/lib/utils/barcode-parser";
 
 export function ProductRowActions({
   product,
@@ -230,12 +230,10 @@ export function ProductRowActions({
             </div>
             <div className="space-y-2">
               <Label htmlFor={`edit-barcode-${product.id}`}>Barkod</Label>
-              <Input
+              <BarcodeInput
                 id={`edit-barcode-${product.id}`}
                 value={form.barcode}
-                onChange={(e) =>
-                  setField("barcode", extractBarcodeOnly(e.target.value))
-                }
+                onValueChange={(v) => setField("barcode", v)}
                 placeholder="Barkod veya karekod okutun…"
                 disabled={isPending}
               />
