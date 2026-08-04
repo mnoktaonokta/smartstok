@@ -12,6 +12,7 @@ import {
   TopClinicsChart,
 } from "@/components/dashboard/dashboard-charts";
 import { CriticalStockPanel } from "@/components/dashboard/critical-stock-panel";
+import { ThemeToggle } from "@/components/dashboard/theme-toggle";
 import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -71,31 +72,34 @@ export function AdminDashboard({
     <div className="mx-auto max-w-6xl space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="font-mono text-xs tracking-[0.25em] text-blue-400 uppercase">
+          <p className="font-mono text-xs tracking-[0.25em] text-blue-500 uppercase dark:text-blue-400">
             Yönetim
           </p>
-          <h1 className="mt-2 text-3xl font-semibold text-white">
+          <h1 className="mt-2 text-3xl font-semibold text-foreground">
             Kontrol Paneli
           </h1>
-          <p className="mt-2 text-sm text-zinc-400">
+          <p className="mt-2 text-sm text-muted-foreground">
             Klinik stok, satış ve ÜTS özeti — anlık görünüm.
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/dashboard/uts-tracking"
-            className={buttonVariants({ variant: "outline" })}
-          >
-            <Radio className="size-4" />
-            ÜTS Takibine Git
-          </Link>
-          {canMutate ? (
-            <Link href="/dashboard/invoices/new" className={buttonVariants()}>
-              <FilePlus2 className="size-4" />
-              Yeni Satış / Fatura
+        <div className="flex flex-col items-stretch gap-2 sm:items-end">
+          <ThemeToggle />
+          <div className="flex flex-wrap gap-2 sm:justify-end">
+            <Link
+              href="/dashboard/uts-tracking"
+              className={buttonVariants({ variant: "outline" })}
+            >
+              <Radio className="size-4" />
+              ÜTS Takibine Git
             </Link>
-          ) : null}
+            {canMutate ? (
+              <Link href="/dashboard/invoices/new" className={buttonVariants()}>
+                <FilePlus2 className="size-4" />
+                Yeni Satış / Fatura
+              </Link>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -106,13 +110,13 @@ export function AdminDashboard({
             <>
               <CardHeader className="flex flex-row items-start justify-between space-y-0">
                 <CardTitle>{card.title}</CardTitle>
-                <Icon className="size-4 shrink-0 text-blue-400" />
+                <Icon className="size-4 shrink-0 text-blue-500 dark:text-blue-400" />
               </CardHeader>
               <CardContent>
-                <p className="font-mono text-2xl font-semibold tracking-tight text-white">
+                <p className="font-mono text-2xl font-semibold tracking-tight text-foreground">
                   {card.value}
                 </p>
-                <p className="mt-1 text-xs text-zinc-500">{card.hint}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{card.hint}</p>
               </CardContent>
             </>
           );

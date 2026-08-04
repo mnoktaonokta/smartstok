@@ -25,7 +25,7 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         className={cn(
-          "relative z-10 max-h-[92dvh] w-[95%] max-w-lg overflow-y-auto animate-[fade-up_0.3s_ease-out] rounded-2xl border border-zinc-800 bg-zinc-950 shadow-[0_0_0_1px_rgba(59,130,246,0.12),0_24px_80px_rgba(0,0,0,0.6)] sm:w-full",
+          "relative z-10 max-h-[92dvh] w-[95%] max-w-lg overflow-y-auto animate-[fade-up_0.3s_ease-out] rounded-2xl border border-border bg-card text-card-foreground shadow-[0_0_0_1px_rgba(59,130,246,0.12),0_24px_80px_rgba(0,0,0,0.35)] sm:w-full",
           className,
         )}
       >
@@ -42,7 +42,7 @@ export function DialogHeader({
   return (
     <div
       className={cn(
-        "space-y-1.5 border-b border-zinc-800 px-4 py-4 sm:px-6 sm:py-5",
+        "space-y-1.5 border-b border-border px-4 py-4 sm:px-6 sm:py-5",
         className,
       )}
       {...props}
@@ -56,7 +56,7 @@ export function DialogTitle({
 }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
     <h2
-      className={cn("text-lg font-semibold tracking-tight text-white", className)}
+      className={cn("text-lg font-semibold tracking-tight text-foreground", className)}
       {...props}
     />
   );
@@ -66,7 +66,7 @@ export function DialogDescription({
   className,
   ...props
 }: React.HTMLAttributes<HTMLParagraphElement>) {
-  return <p className={cn("text-sm text-zinc-400", className)} {...props} />;
+  return <p className={cn("text-sm text-muted-foreground", className)} {...props} />;
 }
 
 export function DialogContent({
@@ -83,7 +83,7 @@ export function DialogFooter({
   return (
     <div
       className={cn(
-        "flex flex-col-reverse gap-2 border-t border-zinc-800 px-4 py-4 sm:flex-row sm:justify-end sm:px-6 [&>button]:min-h-11 [&>button]:w-full sm:[&>button]:w-auto",
+        "flex flex-col-reverse gap-2 border-t border-border px-4 py-4 sm:flex-row sm:justify-end sm:px-6 [&>button]:min-h-11 [&>button]:w-full sm:[&>button]:w-auto",
         className,
       )}
       {...props}

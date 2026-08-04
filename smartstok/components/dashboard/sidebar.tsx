@@ -60,11 +60,11 @@ function SidebarNav({
 
   return (
     <>
-      <div className="shrink-0 border-b border-zinc-800 px-5 py-6">
+      <div className="shrink-0 border-b border-sidebar-border px-5 py-6">
         <p className="font-mono text-[10px] tracking-[0.3em] text-blue-400 uppercase">
           Smart Dental
         </p>
-        <h1 className="mt-1 text-xl font-semibold text-white">SmartStok</h1>
+        <h1 className="mt-1 text-xl font-semibold text-foreground">SmartStok</h1>
       </div>
 
       <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
@@ -83,8 +83,8 @@ function SidebarNav({
               className={cn(
                 "flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
                 active
-                  ? "bg-blue-600/20 text-blue-300 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.35)]"
-                  : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100",
+                  ? "bg-blue-600/20 text-blue-600 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.35)] dark:text-blue-300"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
               <Icon className="size-4 shrink-0" />
@@ -94,9 +94,9 @@ function SidebarNav({
         })}
       </nav>
 
-      <div className="shrink-0 border-t border-zinc-800 bg-zinc-950/95 p-4">
-        <p className="truncate text-sm text-zinc-200">{userName}</p>
-        <p className="text-xs text-blue-400/80">{formatRoles(userRoles)}</p>
+      <div className="shrink-0 border-t border-sidebar-border bg-sidebar p-4">
+        <p className="truncate text-sm text-foreground">{userName}</p>
+        <p className="text-xs text-blue-500/80 dark:text-blue-400/80">{formatRoles(userRoles)}</p>
         <form action={logoutAction} className="mt-3">
           <Button type="submit" variant="outline" size="sm" className="min-h-11 w-full">
             <LogOut className="size-3.5" />
@@ -133,7 +133,7 @@ export function DashboardSidebar({
 
   return (
     <>
-      <header className="no-print fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-3 border-b border-zinc-800 bg-zinc-950/95 px-3 backdrop-blur md:hidden">
+      <header className="no-print fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-sidebar/95 px-3 backdrop-blur md:hidden">
         <Button
           type="button"
           variant="outline"
@@ -148,12 +148,12 @@ export function DashboardSidebar({
           <p className="font-mono text-[10px] tracking-[0.25em] text-blue-400 uppercase">
             Smart Dental
           </p>
-          <p className="truncate text-sm font-semibold text-white">SmartStok</p>
+          <p className="truncate text-sm font-semibold text-foreground">SmartStok</p>
         </div>
       </header>
 
       {/* Masaüstü sidebar */}
-      <aside className="no-print sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-zinc-800 bg-zinc-950/80 md:flex">
+      <aside className="no-print sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
         <SidebarNav userName={userName} userRoles={userRoles} />
       </aside>
 
@@ -176,14 +176,14 @@ export function DashboardSidebar({
         />
         <aside
           className={cn(
-            "absolute inset-y-0 left-0 flex w-[min(18rem,88vw)] flex-col border-r border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-200 ease-out",
+            "absolute inset-y-0 left-0 flex w-[min(18rem,88vw)] flex-col border-r border-sidebar-border bg-sidebar shadow-2xl transition-transform duration-200 ease-out",
             mobileOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >
           <button
             type="button"
             aria-label="Kapat"
-            className="absolute top-3 right-3 inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-900 hover:text-white"
+            className="absolute top-3 right-3 inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
             onClick={() => setMobileOpen(false)}
           >
             <X className="size-5" />
