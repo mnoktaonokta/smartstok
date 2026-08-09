@@ -20,6 +20,24 @@ enum Role {
 enum LocationType {
   MAIN_DEPOT
   CLINIC_DEPOT
+  /** Fail Listesi — gizli sistem deposu */
+  FAIL_HOLD
+  /** Tedarikçi bekleme — gizli sistem deposu */
+  SUPPLIER_PENDING
+}
+
+enum FailCycleStatus {
+  OPEN
+  CLOSED
+}
+
+enum FailGivenDisposition {
+  FAIL_HOLD
+  CONSIGNMENT_EXCESS
+}
+
+enum FailShipmentStatus {
+  CREATED
 }
 
 enum UtsStatus {
@@ -63,6 +81,10 @@ model User {
   tasks              Task[]
   assignedCustomers  Customer[]    @relation("AssignedCustomers")
   inboundReceipts    InboundReceipt[]
+  failIntakes        FailIntake[]           @relation("FailIntakeCreatedBy")
+  failIntakesEdited  FailIntake[]           @relation("FailIntakeEditedBy")
+  failShipments      FailShipment[]
+  failSupplierReceipts FailSupplierReceipt[]
 }
 
 model Product {
@@ -85,6 +107,11 @@ model Product {
 
   stockItems          StockItem[]
   inventoryCountItems InventoryCountItem[]
+  failGivenItems      FailGivenItem[]
+  failShipmentLines   FailShipmentLine[]
+  failSupplierReceiptLines FailSupplierReceiptLine[]
+  failSwapsExpected   FailSupplierSwap[] @relation("SwapExpected")
+  failSwapsReceived   FailSupplierSwap[] @relation("SwapReceived")
 }
 
 model Customer {
@@ -104,10 +131,11 @@ model Customer {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  locations Location[]
-  invoices  Invoice[]
-  visits    Visit[]
-  tasks     Task[]
+  locations   Location[]
+  invoices    Invoice[]
+  visits      Visit[]
+  tasks       Task[]
+  failIntakes FailIntake[]
 
   @@index([assignedUserId])
 }
@@ -143,8 +171,9 @@ model StockItem {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  transfers    TransferLog[]
-  invoiceItems InvoiceItem[]
+  transfers      TransferLog[]
+  invoiceItems   InvoiceItem[]
+  failGivenItems FailGivenItem[]
 
   @@index([productId])
   @@index([locationId])
@@ -314,4 +343,150 @@ model CompanySettings {
   licenseEndDate DateTime?
 
   updatedAt DateTime @updatedAt
+}
+
+/** Tedarikçi fail gönderim döngüsü */
+model FailCycle {
+  id        String          @id @default(cuid())
+  status    FailCycleStatus @default(OPEN)
+  createdAt DateTime        @default(now())
+  closedAt  DateTime?
+
+  intakes   FailIntake[]
+  shipments FailShipment[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+/** Müşteriden fail alma kaydı (tarihli klasör) */
+model FailIntake {
+  id             String    @id @default(cuid())
+  customerId     String
+  customer       Customer  @relation(fields: [customerId], references: [id])
+  cycleId        String
+  cycle          FailCycle @relation(fields: [cycleId], references: [id])
+  createdById    String?
+  createdBy      User?     @relation("FailIntakeCreatedBy", fields: [createdById], references: [id])
+  failCount      Int
+  /** Fail > verilen ise müşteriye kalan adet alacağı */
+  creditQuantity Int       @default(0)
+  notes          String?
+  /** Son düzenleme bilgisi */
+  editedAt       DateTime?
+  editedById     String?
+  editedBy       User?     @relation("FailIntakeEditedBy", fields: [editedById], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  specs      FailIntakeSpec[]
+  givenItems FailGivenItem[]
+
+  @@index([customerId])
+  @@index([cycleId])
+  @@index([createdAt])
+  @@index([editedById])
+}
+
+/** Opsiyonel fail cinsi (serbest giriş) */
+model FailIntakeSpec {
+  id        String     @id @default(cuid())
+  intakeId  String
+  intake    FailIntake @relation(fields: [intakeId], references: [id], onDelete: Cascade)
+  diameter  Float?
+  length    Float?
+  lotNumber String?
+
+  @@index([intakeId])
+}
+
+/** Fail karşılığında verilen stok birimi */
+model FailGivenItem {
+  id          String               @id @default(cuid())
+  intakeId    String
+  intake      FailIntake           @relation(fields: [intakeId], references: [id], onDelete: Cascade)
+  stockItemId String               @unique
+  stockItem   StockItem            @relation(fields: [stockItemId], references: [id])
+  productId   String
+  product     Product              @relation(fields: [productId], references: [id])
+  disposition FailGivenDisposition
+  createdAt   DateTime             @default(now())
+
+  @@index([intakeId])
+  @@index([productId])
+  @@index([disposition])
+}
+
+/** Tedarikçiye fail gönderim talebi */
+model FailShipment {
+  id          String             @id @default(cuid())
+  cycleId     String
+  cycle       FailCycle          @relation(fields: [cycleId], references: [id])
+  status      FailShipmentStatus @default(CREATED)
+  createdById String?
+  createdBy   User?              @relation(fields: [createdById], references: [id])
+  createdAt   DateTime           @default(now())
+
+  lines    FailShipmentLine[]
+  receipts FailSupplierReceipt[]
+
+  @@index([cycleId])
+  @@index([createdAt])
+}
+
+model FailShipmentLine {
+  id            String       @id @default(cuid())
+  shipmentId    String
+  shipment      FailShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product      @relation(fields: [productId], references: [id])
+  quantity      Int
+  referenceCode String
+  productName   String
+
+  @@index([shipmentId])
+  @@index([productId])
+}
+
+/** Tedarikçiden fail ürün teslim alma */
+model FailSupplierReceipt {
+  id          String        @id @default(cuid())
+  shipmentId  String?
+  shipment    FailShipment? @relation(fields: [shipmentId], references: [id])
+  createdById String?
+  createdBy   User?         @relation(fields: [createdById], references: [id])
+  note        String?
+  createdAt   DateTime      @default(now())
+
+  lines FailSupplierReceiptLine[]
+  swaps FailSupplierSwap[]
+
+  @@index([shipmentId])
+  @@index([createdAt])
+}
+
+model FailSupplierReceiptLine {
+  id        String              @id @default(cuid())
+  receiptId String
+  receipt   FailSupplierReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product             @relation(fields: [productId], references: [id])
+  quantity  Int
+  lotNumber String?
+
+  @@index([receiptId])
+  @@index([productId])
+}
+
+model FailSupplierSwap {
+  id                String              @id @default(cuid())
+  receiptId         String
+  receipt           FailSupplierReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  expectedProductId String
+  expectedProduct   Product             @relation("SwapExpected", fields: [expectedProductId], references: [id])
+  receivedProductId String
+  receivedProduct   Product             @relation("SwapReceived", fields: [receivedProductId], references: [id])
+  quantity          Int
+
+  @@index([receiptId])
 }

@@ -287,7 +287,7 @@ export async function getTransferPageDataAction(): Promise<TransferPageData> {
     locations: locations.map((loc) => ({
       id: loc.id,
       name: loc.name,
-      type: loc.type,
+      type: loc.type as "MAIN_DEPOT" | "CLINIC_DEPOT",
       label: locationLabel(loc),
     })),
     fieldUsers,

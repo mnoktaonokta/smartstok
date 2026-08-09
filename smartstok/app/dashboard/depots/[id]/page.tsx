@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getDepotInventoryAction } from "@/lib/actions/depots";
 import { getDepotMovementsAction } from "@/lib/actions/transfers";
+import { getCustomerFailIntakes } from "@/lib/fail/customer-intakes";
 import { DepotDetailTabs } from "@/components/depots/depot-detail-tabs";
 
 export default async function DepotDetailPage({
@@ -19,6 +20,13 @@ export default async function DepotDetailPage({
   if (!location) {
     notFound();
   }
+
+  const showFailTab =
+    location.type === "CLINIC_DEPOT" && Boolean(location.customerId);
+  const failIntakes =
+    showFailTab && location.customerId
+      ? await getCustomerFailIntakes(location.customerId)
+      : [];
 
   const totalQty = rows.reduce((sum, r) => sum + r.quantity, 0);
 
@@ -49,6 +57,8 @@ export default async function DepotDetailPage({
         customerName={location.customerName}
         inventoryRows={rows}
         movements={movements}
+        failIntakes={failIntakes}
+        showFailTab={showFailTab}
       />
     </div>
   );

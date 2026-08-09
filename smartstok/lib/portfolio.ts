@@ -17,19 +17,28 @@ export function customerPortfolioWhere(
   return { id: "__none__" };
 }
 
-/** Klinik depo listesi: ana depo herkese; klinik depolar portföye göre */
+/** Klinik depo listesi: ana depo herkese; klinik depolar portföye göre; gizli sistem depoları hariç */
 export function locationPortfolioWhere(
   userId: string | undefined,
   roles: readonly UserRole[] | null | undefined,
 ): Prisma.LocationWhereInput {
+  const visibleTypes: Prisma.LocationWhereInput = {
+    type: { in: ["MAIN_DEPOT", "CLINIC_DEPOT"] },
+  };
+
   if (canSeeAllCustomers(roles)) {
-    return {};
+    return visibleTypes;
   }
   if (isPortfolioScopedSales(roles) && userId) {
     return {
-      OR: [
-        { type: "MAIN_DEPOT" },
-        { customer: { assignedUserId: userId } },
+      AND: [
+        visibleTypes,
+        {
+          OR: [
+            { type: "MAIN_DEPOT" },
+            { customer: { assignedUserId: userId } },
+          ],
+        },
       ],
     };
   }

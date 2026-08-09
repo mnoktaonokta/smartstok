@@ -24,11 +24,12 @@ export const NAV_PATH_ORDER = [
   "/dashboard",
   "/dashboard/admin",
   "/dashboard/products",
+  "/dashboard/customers",
+  "/dashboard/depots",
+  "/dashboard/transfers",
+  "/dashboard/fail-yonetimi",
   "/dashboard/malkabul",
   "/dashboard/sayim",
-  "/dashboard/depots",
-  "/dashboard/customers",
-  "/dashboard/transfers",
   "/dashboard/invoices",
   "/dashboard/uts-tracking",
 ] as const;
@@ -52,11 +53,13 @@ const ROLE_PAGE_PREFIXES: Record<Exclude<UserRole, "ADMIN">, string[]> = {
     "/dashboard/transfers",
     "/dashboard/depots",
     "/dashboard/products",
+    "/dashboard/fail-yonetimi",
   ],
   DEPO: [
     "/dashboard",
     "/dashboard/malkabul",
     "/dashboard/sayim",
+    "/dashboard/fail-yonetimi",
     "/dashboard/transfers",
     "/dashboard/products",
     "/dashboard/depots",
@@ -65,6 +68,7 @@ const ROLE_PAGE_PREFIXES: Record<Exclude<UserRole, "ADMIN">, string[]> = {
     "/dashboard",
     "/dashboard/products",
     "/dashboard/sayim",
+    "/dashboard/fail-yonetimi",
     "/dashboard/depots",
     "/dashboard/customers",
     "/dashboard/invoices",
@@ -144,6 +148,13 @@ export function isPortfolioScopedSales(
   roles: readonly UserRole[] | null | undefined,
 ): boolean {
   return hasRole(roles, "SAHA") && !canSeeAllCustomers(roles);
+}
+
+/** Fail Yönetimi — Admin, Depo, Saha (Gözlemci salt okunur erişim path’te) */
+export function canAccessFailManagement(
+  roles: readonly UserRole[] | null | undefined,
+): boolean {
+  return hasAnyRole(roles, ["ADMIN", "DEPO", "SAHA", "OBSERVER"]);
 }
 
 /** Mal Kabul — yalnızca Admin ve Depo */

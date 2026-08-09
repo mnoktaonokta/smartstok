@@ -54,7 +54,7 @@ export async function listDepotsAction(): Promise<DepotSummary[]> {
     return {
       id: loc.id,
       name: loc.name,
-      type: loc.type,
+      type: loc.type as "MAIN_DEPOT" | "CLINIC_DEPOT",
       customerName: loc.customer?.name ?? null,
       totalItems: loc.stockItems.length,
       productCount: productIds.size,
@@ -69,14 +69,23 @@ export async function getDepotInventoryAction(
     id: string;
     name: string;
     type: "MAIN_DEPOT" | "CLINIC_DEPOT";
+    customerId: string | null;
     customerName: string | null;
   } | null;
   rows: DepotInventoryRow[];
 }> {
   const location = await prisma.location.findUnique({
     where: { id: locationId },
-    include: { customer: { select: { name: true } } },
+    include: { customer: { select: { id: true, name: true } } },
   });
+
+  if (
+    location &&
+    location.type !== "MAIN_DEPOT" &&
+    location.type !== "CLINIC_DEPOT"
+  ) {
+    return { location: null, rows: [] };
+  }
 
   if (!location) {
     return { location: null, rows: [] };
@@ -164,7 +173,8 @@ export async function getDepotInventoryAction(
     location: {
       id: location.id,
       name: location.name,
-      type: location.type,
+      type: location.type as "MAIN_DEPOT" | "CLINIC_DEPOT",
+      customerId: location.customerId ?? location.customer?.id ?? null,
       customerName: location.customer?.name ?? null,
     },
     rows,

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  AlertTriangle,
   ArrowLeftRight,
   ClipboardList,
   FileText,
@@ -13,7 +14,6 @@ import {
   Package,
   PackagePlus,
   Radio,
-  Shield,
   Users,
   Warehouse,
   X,
@@ -30,13 +30,13 @@ import { Button } from "@/components/ui/button";
 
 const navItems = [
   { href: "/dashboard", label: "Özet", icon: LayoutDashboard },
-  { href: "/dashboard/admin", label: "Admin", icon: Shield, adminOnly: true },
   { href: "/dashboard/products", label: "Ürünler", icon: Package },
+  { href: "/dashboard/customers", label: "Müşteriler", icon: Users },
+  { href: "/dashboard/depots", label: "Depolar", icon: Warehouse },
+  { href: "/dashboard/transfers", label: "Transfer Yapma", icon: ArrowLeftRight },
+  { href: "/dashboard/fail-yonetimi", label: "Fail Yönetimi", icon: AlertTriangle },
   { href: "/dashboard/malkabul", label: "Mal Kabul", icon: PackagePlus },
   { href: "/dashboard/sayim", label: "Stok Sayımı", icon: ClipboardList },
-  { href: "/dashboard/depots", label: "Depolar", icon: Warehouse },
-  { href: "/dashboard/customers", label: "Müşteriler", icon: Users },
-  { href: "/dashboard/transfers", label: "Transfer Yapma", icon: ArrowLeftRight },
   { href: "/dashboard/invoices", label: "Faturalar", icon: FileText },
   { href: "/dashboard/uts-tracking", label: "ÜTS", icon: Radio },
 ] as const;
@@ -51,12 +51,9 @@ function SidebarNav({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const items = navItems.filter((item) => {
-    if ("adminOnly" in item && item.adminOnly) {
-      return hasRole(userRoles, "ADMIN");
-    }
-    return canAccessPath(userRoles, item.href);
-  });
+  const isAdmin = hasRole(userRoles, "ADMIN");
+  const items = navItems.filter((item) => canAccessPath(userRoles, item.href));
+  const adminActive = pathname.startsWith("/dashboard/admin");
 
   return (
     <>
@@ -95,8 +92,35 @@ function SidebarNav({
       </nav>
 
       <div className="shrink-0 border-t border-sidebar-border bg-sidebar p-4">
-        <p className="truncate text-sm font-medium text-zinc-950 dark:text-foreground">{userName}</p>
-        <p className="text-xs text-blue-700/90 dark:text-blue-400/80">{formatRoles(userRoles)}</p>
+        {isAdmin ? (
+          <Link
+            href="/dashboard/admin"
+            onClick={onNavigate}
+            className={cn(
+              "block rounded-lg px-2 py-1.5 transition-colors",
+              adminActive
+                ? "bg-blue-600/20 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.35)]"
+                : "hover:bg-muted",
+            )}
+            title="Admin paneli"
+          >
+            <p className="truncate text-sm font-medium text-zinc-950 dark:text-foreground">
+              {userName}
+            </p>
+            <p className="text-xs text-blue-700/90 dark:text-blue-400/80">
+              {formatRoles(userRoles)} · Admin paneli
+            </p>
+          </Link>
+        ) : (
+          <>
+            <p className="truncate text-sm font-medium text-zinc-950 dark:text-foreground">
+              {userName}
+            </p>
+            <p className="text-xs text-blue-700/90 dark:text-blue-400/80">
+              {formatRoles(userRoles)}
+            </p>
+          </>
+        )}
         <form action={logoutAction} className="mt-3">
           <Button type="submit" variant="outline" size="sm" className="min-h-11 w-full">
             <LogOut className="size-3.5" />
