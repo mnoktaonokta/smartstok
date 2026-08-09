@@ -175,8 +175,7 @@ export async function startInventoryCountAction(): Promise<{
     if (open) {
       return {
         error:
-          "Zaten açık bir taslak sayım var. Önce onu tamamlayın veya devam edin.",
-        countId: open.id,
+          "Zaten açık bir taslak sayım var. Önce onu tamamlayın veya onu silin.",
       };
     }
 
@@ -229,6 +228,32 @@ export async function startInventoryCountAction(): Promise<{
   } catch (error) {
     console.error("[startInventoryCountAction]", error);
     return { error: "Sayım fişi oluşturulamadı." };
+  }
+}
+
+/** Yalnızca DRAFT sayım fişini siler (stok değişmez) */
+export async function deleteInventoryCountDraftAction(
+  countId: string,
+): Promise<{ error?: string; ok?: boolean }> {
+  try {
+    const gate = await requireCountAccess(true);
+    if (gate.error) return { error: gate.error };
+
+    const row = await prisma.inventoryCount.findUnique({
+      where: { id: countId },
+      select: { id: true, status: true },
+    });
+    if (!row) return { error: "Sayım fişi bulunamadı." };
+    if (row.status !== "DRAFT") {
+      return { error: "Yalnızca taslak sayımlar silinebilir." };
+    }
+
+    await prisma.inventoryCount.delete({ where: { id: countId } });
+    revalidateCountPaths(countId);
+    return { ok: true };
+  } catch (error) {
+    console.error("[deleteInventoryCountDraftAction]", error);
+    return { error: "Sayım fişi silinemedi." };
   }
 }
 

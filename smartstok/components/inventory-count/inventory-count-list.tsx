@@ -2,8 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { ClipboardList, Loader2, Plus } from "lucide-react";
-import { startInventoryCountAction } from "@/lib/actions/inventory-count";
+import { ClipboardList, Loader2, Plus, Trash2 } from "lucide-react";
+import {
+  deleteInventoryCountDraftAction,
+  startInventoryCountAction,
+} from "@/lib/actions/inventory-count";
 import type { InventoryCountListItem } from "@/lib/actions/inventory-count";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +36,7 @@ export function InventoryCountList({
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   function handleStart() {
     setError(null);
@@ -41,10 +45,30 @@ export function InventoryCountList({
       if (result.countId) {
         router.push(`/dashboard/sayim/${result.countId}`);
         router.refresh();
-        if (result.error) setError(result.error);
         return;
       }
       setError(result.error ?? "Sayım başlatılamadı.");
+    });
+  }
+
+  function handleDeleteDraft(countId: string) {
+    if (
+      !window.confirm(
+        "Bu taslak sayım silinecek. Sayılan miktarlar kaybolur; stoklar değişmez. Emin misiniz?",
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setDeletingId(countId);
+    startTransition(async () => {
+      const result = await deleteInventoryCountDraftAction(countId);
+      setDeletingId(null);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
     });
   }
 
@@ -127,14 +151,34 @@ export function InventoryCountList({
                   <span className="text-amber-300">{c.overCount} fazla</span>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => router.push(`/dashboard/sayim/${c.id}`)}
-                  >
-                    {c.status === "DRAFT" ? "Devam Et" : "İncele"}
-                  </Button>
+                  <div className="inline-flex items-center justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => router.push(`/dashboard/sayim/${c.id}`)}
+                    >
+                      {c.status === "DRAFT" ? "Devam Et" : "İncele"}
+                    </Button>
+                    {canMutate && c.status === "DRAFT" ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="min-w-11 px-0 text-red-400 hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-300"
+                        aria-label="Taslak sayımı sil"
+                        title="Taslak sayımı sil"
+                        disabled={isPending}
+                        onClick={() => handleDeleteDraft(c.id)}
+                      >
+                        {deletingId === c.id ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="size-4" />
+                        )}
+                      </Button>
+                    ) : null}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
