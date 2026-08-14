@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { toArrayBufferBytes } from "@/lib/bytes";
 import { hasRole } from "@/lib/roles";
 import { SINGLETON_ID } from "@/lib/services/erp/company-settings";
 
@@ -52,7 +53,7 @@ export async function GET() {
     return new Response("Not found", { status: 404 });
   }
 
-  return new Response(new Uint8Array(row.logoData), {
+  return new Response(toArrayBufferBytes(row.logoData), {
     status: 200,
     headers: {
       "Content-Type": row.logoMimeType,
@@ -105,7 +106,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const bytes = toArrayBufferBytes(
+      new Uint8Array(await blob.arrayBuffer()),
+    );
     const mimeStored =
       normalizedMime === "image/jpg" ? "image/jpeg" : normalizedMime;
 

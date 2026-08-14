@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { toArrayBufferBytes } from "@/lib/bytes";
 import { canAccessPath } from "@/lib/roles";
 import { elogoBinaryToPdf, isPdfBuffer } from "@/lib/services/edocument/zip";
 import type { UserRole } from "@/types/next-auth";
@@ -42,7 +43,7 @@ export async function GET(
 
   if (invoice.pdfData && invoice.pdfData.length > 0) {
     const raw = Buffer.from(invoice.pdfData);
-    let pdfBytes: Uint8Array = new Uint8Array(raw);
+    let pdfBytes = toArrayBufferBytes(raw);
 
     if (!isPdfBuffer(raw)) {
       const unwrapped = await elogoBinaryToPdf(raw);
@@ -52,7 +53,7 @@ export async function GET(
           { status: 422 },
         );
       }
-      pdfBytes = new Uint8Array(unwrapped);
+      pdfBytes = toArrayBufferBytes(unwrapped);
       // DB’yi düzelt (eski zip kayıtları)
       await prisma.invoice.update({
         where: { id },

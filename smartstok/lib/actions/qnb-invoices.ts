@@ -20,6 +20,7 @@ import {
   buildPublicEntityUblExtras,
   resolveInvoiceProfileId,
 } from "@/lib/services/edocument/kamu-invoice";
+import type { UblParty } from "@/lib/services/edocument/types";
 import { getOrCreateCompanySettings } from "@/lib/services/erp/company-settings";
 
 const TAX_RATE = 10;
@@ -275,15 +276,7 @@ export async function createQnbInvoiceAction(
       isPublicEntity,
       isEInvoice,
     });
-    let buyer = null as
-      | {
-          vknTckn: string;
-          name: string;
-          taxOffice: string | null;
-          address: string | null;
-          phone: string | null;
-        }
-      | null;
+    let buyer: UblParty | null = null;
     let paymentIban: string | null = null;
     let note = buildInvoiceDocumentNote(
       parsed.data.note,

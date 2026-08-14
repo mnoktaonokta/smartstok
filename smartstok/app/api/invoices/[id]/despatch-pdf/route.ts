@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { toArrayBufferBytes } from "@/lib/bytes";
 import { canAccessPath } from "@/lib/roles";
 import { renderDespatchPdfForInvoice } from "@/lib/services/edocument/load-despatch-print";
 import type { UserRole } from "@/types/next-auth";
@@ -27,9 +28,10 @@ export async function GET(
     return new Response("e-İrsaliye bulunamadı.", { status: 404 });
   }
 
+  const pdfBytes = toArrayBufferBytes(pdf);
   await prisma.invoice.update({
     where: { id },
-    data: { despatchPdfData: new Uint8Array(pdf) },
+    data: { despatchPdfData: pdfBytes },
   });
 
   const invoice = await prisma.invoice.findUnique({
@@ -38,7 +40,7 @@ export async function GET(
   });
   const filename = `irsaliye-${invoice?.despatchUuid?.slice(0, 8) || invoice?.invoiceNo || id}.pdf`;
 
-  return new Response(new Uint8Array(pdf), {
+  return new Response(pdfBytes, {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
