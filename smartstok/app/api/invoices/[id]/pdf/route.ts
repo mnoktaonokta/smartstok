@@ -41,26 +41,27 @@ export async function GET(
   }
 
   if (invoice.pdfData && invoice.pdfData.length > 0) {
-    let buf = Buffer.from(invoice.pdfData);
-    if (!isPdfBuffer(buf)) {
-      const unwrapped = await elogoBinaryToPdf(buf);
-      if (unwrapped) {
-        buf = unwrapped;
-        // DB’yi düzelt (eski zip kayıtları)
-        await prisma.invoice.update({
-          where: { id },
-          data: { pdfData: new Uint8Array(unwrapped) },
-        });
-      } else {
+    const raw = Buffer.from(invoice.pdfData);
+    let pdfBytes: Uint8Array = new Uint8Array(raw);
+
+    if (!isPdfBuffer(raw)) {
+      const unwrapped = await elogoBinaryToPdf(raw);
+      if (!unwrapped) {
         return new Response(
           "Kayıtlı dosya geçerli PDF değil. Faturalar listesinden PDF’yi yeniden çekin.",
           { status: 422 },
         );
       }
+      pdfBytes = new Uint8Array(unwrapped);
+      // DB’yi düzelt (eski zip kayıtları)
+      await prisma.invoice.update({
+        where: { id },
+        data: { pdfData: pdfBytes },
+      });
     }
 
     const filename = `${invoice.faturaNo || invoice.invoiceNo || id}.pdf`;
-    return new Response(new Uint8Array(buf), {
+    return new Response(pdfBytes, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
