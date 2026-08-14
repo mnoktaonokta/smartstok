@@ -60,7 +60,7 @@ export async function GET(
     }
 
     const filename = `${invoice.faturaNo || invoice.invoiceNo || id}.pdf`;
-    return new Response(buf, {
+    return new Response(new Uint8Array(buf), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",

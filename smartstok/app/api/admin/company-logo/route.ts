@@ -52,7 +52,7 @@ export async function GET() {
     return new Response("Not found", { status: 404 });
   }
 
-  return new Response(Buffer.from(row.logoData), {
+  return new Response(new Uint8Array(row.logoData), {
     status: 200,
     headers: {
       "Content-Type": row.logoMimeType,

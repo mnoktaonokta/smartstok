@@ -38,7 +38,7 @@ export async function GET(
   });
   const filename = `irsaliye-${invoice?.despatchUuid?.slice(0, 8) || invoice?.invoiceNo || id}.pdf`;
 
-  return new Response(pdf, {
+  return new Response(new Uint8Array(pdf), {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
