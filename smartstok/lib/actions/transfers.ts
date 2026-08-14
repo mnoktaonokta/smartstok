@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { ensureMainDepot } from "@/lib/inventory";
 import { assertCanMutate, canSeeAllCustomers, mutationDeniedMessage } from "@/lib/roles";
 import { locationPortfolioWhere } from "@/lib/portfolio";
+import { resolveActingUserId } from "@/lib/resolve-acting-user";
 import type { UserRole } from "@/types/next-auth";
 import {
   groupTransferLogs,
@@ -72,6 +73,9 @@ export async function executeConsignmentTransferAction(
       return { error: "Oturum bulunamadı." };
     }
     assertCanMutate(session.user.roles);
+
+    const actor = await resolveActingUserId(session.user);
+    if (!actor.ok) return { error: actor.error };
 
     const parsed = transferSchema.safeParse(input);
     if (!parsed.success) {
@@ -150,7 +154,7 @@ export async function executeConsignmentTransferAction(
           fromLocationId: fromLocation.id,
           toLocationId: toLocation.id,
           stockItemId,
-          executedById: session.user.id,
+          executedById: actor.userId,
           requestedById: requester.id,
         })),
       });

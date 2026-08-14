@@ -21,7 +21,7 @@ import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { sktToDateInputValue } from "@/lib/utils/barcode-parser";
+import { datesFromBarcodeParse } from "@/lib/utils/barcode-parser";
 import {
   Dialog,
   DialogContent,
@@ -145,6 +145,7 @@ export function InboundReceiptWorkspace({
   const [qty, setQty] = useState("1");
   const [lot, setLot] = useState("");
   const [expiry, setExpiry] = useState("");
+  const [productionDate, setProductionDate] = useState("");
   const [supplierName, setSupplierName] = useState("");
   const [documentNumber, setDocumentNumber] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -223,6 +224,7 @@ export function InboundReceiptWorkspace({
         quantity,
         lotNumber: lot.trim().toUpperCase(),
         expiryDate: expiry || null,
+        productionDate: productionDate || null,
         unitPrice: invPrice ?? null,
       },
     ]);
@@ -230,6 +232,7 @@ export function InboundReceiptWorkspace({
     setQty("1");
     setLot("");
     setExpiry("");
+    setProductionDate("");
     setError(null);
   }
 
@@ -435,8 +438,14 @@ export function InboundReceiptWorkspace({
                 onSelect={(p) => setPendingProduct(p)}
                 onParsed={(parsed) => {
                   if (parsed.lot) setLot(parsed.lot);
-                  const dateVal = sktToDateInputValue(parsed.skt);
-                  if (dateVal) setExpiry(dateVal);
+                  // Barkoddan önce URT (AI 11); SKT yoksa URT+5 (parser)
+                  const dates = datesFromBarcodeParse(parsed);
+                  if (dates.productionDate) {
+                    setProductionDate(dates.productionDate);
+                  }
+                  if (dates.expiryDate) {
+                    setExpiry(dates.expiryDate);
+                  }
                 }}
                 selectedLabel={
                   pendingProduct
@@ -465,14 +474,26 @@ export function InboundReceiptWorkspace({
                 placeholder="LOT-…"
               />
             </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="skt">SKT</Label>
+            <div className="space-y-2">
+              <Label htmlFor="urt">Üretim Tarihi (URT)</Label>
+              <Input
+                id="urt"
+                type="date"
+                value={productionDate}
+                onChange={(e) => setProductionDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="skt">Son Kullanma Tarihi (SKT)</Label>
               <Input
                 id="skt"
                 type="date"
                 value={expiry}
                 onChange={(e) => setExpiry(e.target.value)}
               />
+              <p className="text-xs text-zinc-500">
+                Karekoddan URT gelir; SKT şu an URT + 5 yıl yazılır.
+              </p>
             </div>
           </div>
           <Button type="button" variant="outline" onClick={addToBasket}>
@@ -487,6 +508,7 @@ export function InboundReceiptWorkspace({
                   <th className="px-3 py-2">Ürün</th>
                   <th className="px-3 py-2">Miktar</th>
                   <th className="px-3 py-2">Lot</th>
+                  <th className="px-3 py-2">URT</th>
                   <th className="px-3 py-2">SKT</th>
                   <th className="px-3 py-2" />
                 </tr>
@@ -495,7 +517,7 @@ export function InboundReceiptWorkspace({
                 {basket.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="px-3 py-8 text-center text-zinc-500"
                     >
                       Sepet boş.
@@ -513,6 +535,9 @@ export function InboundReceiptWorkspace({
                       <td className="px-3 py-2 font-mono">{row.quantity}</td>
                       <td className="px-3 py-2 font-mono text-zinc-300">
                         {row.lotNumber}
+                      </td>
+                      <td className="px-3 py-2 text-zinc-400">
+                        {row.productionDate ?? "—"}
                       </td>
                       <td className="px-3 py-2 text-zinc-400">
                         {row.expiryDate ?? "—"}

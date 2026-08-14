@@ -22,6 +22,8 @@ export type ScannedInboundLine = {
   quantity: number;
   lotNumber: string;
   expiryDate: string | null; // YYYY-MM-DD
+  /** Üretim tarihi YYYY-MM-DD (GS1 AI 11) */
+  productionDate?: string | null;
   unitPrice?: number | null;
 };
 
@@ -32,6 +34,7 @@ const scannedLineSchema = z.object({
   quantity: z.number().int().positive().max(5000),
   lotNumber: z.string().trim().min(1),
   expiryDate: z.string().nullable().optional(),
+  productionDate: z.string().nullable().optional(),
   unitPrice: z.number().nonnegative().nullable().optional(),
 });
 
@@ -219,16 +222,40 @@ export async function confirmInboundReceiptAction(
         }
 
         const lotNumber = line.lotNumber.trim().toUpperCase();
-        const expiry =
+        let expiry =
           line.expiryDate && line.expiryDate.length >= 8
             ? new Date(line.expiryDate)
             : null;
+        let production: Date | null =
+          line.productionDate && line.productionDate.length >= 8
+            ? new Date(line.productionDate)
+            : null;
+        if (production && Number.isNaN(production.getTime())) {
+          production = null;
+        }
+        if (expiry && Number.isNaN(expiry.getTime())) {
+          expiry = null;
+        }
+        // URT var, SKT yok → +5 yıl
+        if (production && !expiry) {
+          expiry = new Date(production);
+          expiry.setFullYear(expiry.getFullYear() + 5);
+        }
+        // SKT var, URT yok → −5 yıl (eski kayıtlar)
+        if (
+          (!production || Number.isNaN(production.getTime())) &&
+          expiry
+        ) {
+          production = new Date(expiry);
+          production.setFullYear(production.getFullYear() - 5);
+        }
 
         await tx.stockItem.createMany({
           data: Array.from({ length: line.quantity }, () => ({
             productId: product.id,
             lotNumber,
-            expiryDate: expiry && !Number.isNaN(expiry.getTime()) ? expiry : null,
+            expiryDate: expiry,
+            productionDate: production,
             locationId: mainDepot.id,
             isAvailable: true,
           })),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import {
@@ -8,17 +8,25 @@ import {
   getLocationStockForInvoiceAction,
   type InvoiceStockRow,
 } from "@/lib/actions/invoices";
+import {
+  saveDraftInvoiceAction,
+  updateDraftInvoiceAction,
+} from "@/lib/actions/edocument-invoices";
+import { queryCustomerEDocumentStatusAction } from "@/lib/actions/edocument-taxpayer-status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
-const TAX_RATE = 10;
+const DEFAULT_TAX_RATE = 10;
 
 type CustomerOption = {
   id: string;
   name: string;
   vknTckn: string;
+  isPublicEntity?: boolean;
+  spendingUnitVkn?: string | null;
   locations: Array<{ id: string; name: string }>;
 };
 
@@ -51,6 +59,7 @@ function computeFinancials(
   stockRows: InvoiceStockRow[],
   lines: Record<string, LineState>,
   targetTotalInput: string,
+  taxRate: number,
 ) {
   const baseLines: Array<
     Omit<ComputedLine, "footerShareTl" | "discountTl" | "net"> & {
@@ -87,7 +96,7 @@ function computeFinancials(
     baseLines.reduce((s, l) => s + l.lineDiscountTl, 0),
   );
   const netAfterLines = round2(baseLines.reduce((s, l) => s + l.netAfterLine, 0));
-  const taxMultiplier = 1 + TAX_RATE / 100;
+  const taxMultiplier = 1 + taxRate / 100;
   const grandAfterLines = round2(netAfterLines * taxMultiplier);
 
   // Hedef tutar KDV dahil (TOPLAM). Fark, KDV hariç TL iskontoya çevrilir.
@@ -140,7 +149,7 @@ function computeFinancials(
 
   const totalDiscount = round2(computed.reduce((s, l) => s + l.discountTl, 0));
   const netTotal = round2(Math.max(0, grossTotal - totalDiscount));
-  const taxTotal = round2(netTotal * (TAX_RATE / 100));
+  const taxTotal = round2(netTotal * (taxRate / 100));
   const grandTotal = round2(netTotal + taxTotal);
 
   return {
@@ -154,7 +163,7 @@ function computeFinancials(
       netTotal,
       taxTotal,
       grandTotal,
-      taxRate: TAX_RATE,
+      taxRate,
     },
   };
 }
@@ -168,31 +177,108 @@ function formatTry(n: number) {
 
 export function NewInvoiceForm({
   customers,
+  mode = "bizimhesap",
+  draftId,
+  initialDraft,
 }: {
   customers: CustomerOption[];
+  /** bizimhesap: ERP taslak; edocument: QNB/e-Logo e-Arşiv / e-Fatura */
+  mode?: "bizimhesap" | "edocument" | "qnb";
+  /** Düzenlenen taslak id */
+  draftId?: string;
+  initialDraft?: {
+    customerId: string;
+    locationId: string;
+    note: string;
+    lines: Array<{
+      productId: string;
+      lotNumber: string;
+      quantity: number;
+      unitPrice: number;
+      discount: number;
+    }>;
+  };
 }) {
+  const isEDocument = mode === "edocument" || mode === "qnb";
   const router = useRouter();
-  const [customerId, setCustomerId] = useState("");
-  const [locationId, setLocationId] = useState("");
-  const [note, setNote] = useState("");
+  const [customerId, setCustomerId] = useState(initialDraft?.customerId ?? "");
+  const [locationId, setLocationId] = useState(initialDraft?.locationId ?? "");
+  const [note, setNote] = useState(initialDraft?.note ?? "");
   const [targetTotal, setTargetTotal] = useState("");
+  const [taxRate, setTaxRate] = useState<10 | 20>(DEFAULT_TAX_RATE);
   const [stockRows, setStockRows] = useState<InvoiceStockRow[]>([]);
   const [lines, setLines] = useState<Record<string, LineState>>({});
   const [loadingStock, setLoadingStock] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [edocStatus, setEdocStatus] = useState<{
+    loading: boolean;
+    isEInvoiceUser: boolean | null;
+    message: string | null;
+    error: string | null;
+  }>({ loading: false, isEInvoiceUser: null, message: null, error: null });
+  const draftHydratedRef = useRef(false);
 
   const customer = customers.find((c) => c.id === customerId);
   const locations = customer?.locations ?? [];
+  const isPublicEntity = Boolean(customer?.isPublicEntity);
+  const invoiceProfileLocked = isEDocument && isPublicEntity;
 
   useEffect(() => {
     const locs = customers.find((c) => c.id === customerId)?.locations ?? [];
+    if (initialDraft && customerId === initialDraft.customerId) {
+      return;
+    }
     if (locs.length === 1) {
       setLocationId(locs[0].id);
     } else {
       setLocationId("");
     }
-  }, [customerId, customers]);
+  }, [customerId, customers, initialDraft]);
+
+  useEffect(() => {
+    if (!isEDocument || !customer?.vknTckn) {
+      setEdocStatus({
+        loading: false,
+        isEInvoiceUser: null,
+        message: null,
+        error: null,
+      });
+      return;
+    }
+
+    let cancelled = false;
+    setEdocStatus({
+      loading: true,
+      isEInvoiceUser: null,
+      message: null,
+      error: null,
+    });
+
+    void (async () => {
+      const r = await queryCustomerEDocumentStatusAction(customer.vknTckn);
+      if (cancelled) return;
+      if (r.error) {
+        setEdocStatus({
+          loading: false,
+          isEInvoiceUser: null,
+          message: null,
+          error: r.error,
+        });
+        return;
+      }
+      setEdocStatus({
+        loading: false,
+        isEInvoiceUser: r.isEInvoiceUser ?? null,
+        message: r.message ?? null,
+        error: null,
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isEDocument, customer?.vknTckn]);
 
   useEffect(() => {
     let cancelled = false;
@@ -207,7 +293,10 @@ export function NewInvoiceForm({
 
       setLoadingStock(true);
       try {
-        const rows = await getLocationStockForInvoiceAction(locationId);
+        const rows = await getLocationStockForInvoiceAction(
+          locationId,
+          draftId,
+        );
         if (cancelled) return;
         setStockRows(rows);
         const next: Record<string, LineState> = {};
@@ -219,6 +308,32 @@ export function NewInvoiceForm({
             discountPercent: "0",
           };
         }
+
+        if (initialDraft && !draftHydratedRef.current) {
+          for (const dl of initialDraft.lines) {
+            const key = `${dl.productId}::${dl.lotNumber}`;
+            const row = rows.find((r) => r.key === key);
+            if (!row) continue;
+            const gross = dl.unitPrice * dl.quantity;
+            const pct =
+              gross > 0
+                ? String(
+                    Math.round(
+                      Math.min(100, Math.max(0, (dl.discount / gross) * 100)) *
+                        100,
+                    ) / 100,
+                  )
+                : "0";
+            next[key] = {
+              selected: true,
+              quantity: Math.min(dl.quantity, row.available),
+              unitPrice: String(dl.unitPrice),
+              discountPercent: pct,
+            };
+          }
+          draftHydratedRef.current = true;
+        }
+
         setLines(next);
         setTargetTotal("");
       } finally {
@@ -230,20 +345,39 @@ export function NewInvoiceForm({
     return () => {
       cancelled = true;
     };
-  }, [locationId]);
+  }, [locationId, draftId, initialDraft]);
 
   const { computed, summary } = useMemo(
-    () => computeFinancials(stockRows, lines, targetTotal),
-    [stockRows, lines, targetTotal],
+    () => computeFinancials(stockRows, lines, targetTotal, taxRate),
+    [stockRows, lines, targetTotal, taxRate],
   );
 
   const selectedCount = computed.length;
+  const allSelected =
+    stockRows.length > 0 &&
+    stockRows.every((row) => lines[row.key]?.selected);
 
   function updateLine(key: string, patch: Partial<LineState>) {
     setLines((prev) => ({
       ...prev,
       [key]: { ...prev[key], ...patch },
     }));
+  }
+
+  function toggleSelectAll(checked: boolean) {
+    setLines((prev) => {
+      const next = { ...prev };
+      for (const row of stockRows) {
+        const current = next[row.key];
+        if (!current) continue;
+        next[row.key] = {
+          ...current,
+          selected: checked,
+          quantity: checked ? row.available : current.quantity,
+        };
+      }
+      return next;
+    });
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -273,6 +407,33 @@ export function NewInvoiceForm({
     }));
 
     startTransition(async () => {
+      if (isEDocument) {
+        const result = draftId
+          ? await updateDraftInvoiceAction(draftId, {
+              customerId,
+              locationId,
+              note: note || undefined,
+              lines: payloadLines,
+            })
+          : await saveDraftInvoiceAction({
+              customerId,
+              locationId,
+              note: note || undefined,
+              lines: payloadLines,
+            });
+        if (result.error) {
+          setError(result.error);
+          return;
+        }
+        router.push(
+          result.invoiceId
+            ? `/dashboard/invoices/${result.invoiceId}`
+            : "/dashboard/invoices",
+        );
+        router.refresh();
+        return;
+      }
+
       const result = await createInvoiceAction({
         customerId,
         locationId,
@@ -296,6 +457,73 @@ export function NewInvoiceForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {isEDocument && customerId ? (
+        <div
+          className={cn(
+            "rounded-xl border px-4 py-3 text-sm",
+            edocStatus.loading
+              ? "border-zinc-700 bg-zinc-900/60 text-zinc-400"
+              : edocStatus.error
+                ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
+                : edocStatus.isEInvoiceUser
+                  ? "border-sky-500/40 bg-sky-500/10 text-sky-100"
+                  : edocStatus.isEInvoiceUser === false
+                    ? "border-amber-600/50 bg-amber-500/10 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300/90"
+                    : "border-zinc-700 bg-zinc-900/60 text-zinc-400",
+          )}
+          role="status"
+        >
+          {edocStatus.loading ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="size-4 animate-spin" />
+              E-belge mükellef durumu sorgulanıyor…
+            </span>
+          ) : edocStatus.error ? (
+            <>Mükellef sorgusu: {edocStatus.error}</>
+          ) : edocStatus.isEInvoiceUser ? (
+            <>
+              <span className="font-semibold">E-Fatura müşterisi</span>
+              <span className="mt-0.5 block text-sky-100/90">
+                {edocStatus.message}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="font-semibold text-amber-900 dark:text-amber-200">
+                E-Arşiv müşterisi
+              </span>
+              <span className="mt-0.5 block text-amber-800 dark:text-amber-300/90">
+                {edocStatus.message}
+              </span>
+            </>
+          )}
+        </div>
+      ) : null}
+
+      {invoiceProfileLocked ? (
+        <div
+          className="rounded-xl border border-violet-500/40 bg-violet-500/10 px-4 py-3 text-sm text-violet-100"
+          role="status"
+        >
+          <span className="font-semibold">Kamu kurumu</span>
+          <span className="mt-0.5 block text-violet-100/90">
+            Fatura senaryosu{" "}
+            <span className="font-mono font-semibold">KAMUFATURASI</span> olarak
+            kilitlendi. Muhasebe VKN:{" "}
+            <span className="font-mono">{customer?.vknTckn}</span>
+            {customer?.spendingUnitVkn ? (
+              <>
+                {" "}
+                · Harcama birimi VKN:{" "}
+                <span className="font-mono">{customer.spendingUnitVkn}</span>
+              </>
+            ) : (
+              <> · Harcama birimi VKN eksik — müşteri kartını güncelleyin.</>
+            )}
+          </span>
+        </div>
+      ) : null}
+
       <div className="grid gap-4 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-6 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="customer">Müşteri / Klinik</Label>
@@ -308,6 +536,7 @@ export function NewInvoiceForm({
             <option value="">Seçin…</option>
             {customers.map((c) => (
               <option key={c.id} value={c.id}>
+                {c.isPublicEntity ? "[Kamu] " : ""}
                 {c.name} ({c.vknTckn})
               </option>
             ))}
@@ -329,6 +558,28 @@ export function NewInvoiceForm({
               </option>
             ))}
           </Select>
+        </div>
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor="invoice-profile">Fatura senaryosu</Label>
+          <Select
+            id="invoice-profile"
+            value={invoiceProfileLocked ? "KAMUFATURASI" : "AUTO"}
+            disabled
+            aria-readonly="true"
+          >
+            {invoiceProfileLocked ? (
+              <option value="KAMUFATURASI">KAMUFATURASI (kamu — kilitli)</option>
+            ) : (
+              <option value="AUTO">
+                Otomatik (e-Fatura: ILAC_TIBBICIHAZ · e-Arşiv: EARSIVFATURA)
+              </option>
+            )}
+          </Select>
+          <p className="text-xs text-zinc-500">
+            {invoiceProfileLocked
+              ? "Kamu müşterilerinde senaryo değiştirilemez."
+              : "Senaryo, mükellef sorgusuna göre fatura kesiminde belirlenir."}
+          </p>
         </div>
         <div className="space-y-2 sm:col-span-2">
           <Label htmlFor="note">Not (opsiyonel)</Label>
@@ -356,7 +607,7 @@ export function NewInvoiceForm({
         {!locationId ? (
           <p className="text-sm text-zinc-500">Önce müşteri ve depo seçin.</p>
         ) : stockRows.length === 0 && !loadingStock ? (
-          <p className="text-sm text-amber-300/90">
+          <p className="text-sm text-amber-800 dark:text-amber-300/90">
             Bu depoda faturalandırılacak müsait stok yok.
           </p>
         ) : (
@@ -364,7 +615,22 @@ export function NewInvoiceForm({
             <table className="w-full min-w-[780px] text-sm">
               <thead className="bg-zinc-900/80 text-zinc-400">
                 <tr>
-                  <th className="px-3 py-3 text-left">Seç</th>
+                  <th className="px-3 py-3 text-left">
+                    <label className="flex cursor-pointer flex-col items-start gap-1.5">
+                      <span>Seç</span>
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-normal text-zinc-500 normal-case tracking-normal">
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-blue-500"
+                          checked={allSelected}
+                          disabled={stockRows.length === 0}
+                          onChange={(e) => toggleSelectAll(e.target.checked)}
+                          aria-label="Tümünü seç"
+                        />
+                        Tümünü seç
+                      </span>
+                    </label>
+                  </th>
                   <th className="px-3 py-3 text-left">Ürün / Lot</th>
                   <th className="px-3 py-3 text-left">Müsait</th>
                   <th className="px-3 py-3 text-left">Adet</th>
@@ -512,10 +778,25 @@ export function NewInvoiceForm({
               label="Net Toplam"
               value={`${formatTry(summary.netTotal)} ₺`}
             />
-            <SummaryRow
-              label={`KDV (%${summary.taxRate})`}
-              value={`${formatTry(summary.taxTotal)} ₺`}
-            />
+            <div className="flex items-center justify-between gap-3">
+              <dt className="flex items-center gap-2 text-zinc-400">
+                <span>KDV</span>
+                <Select
+                  aria-label="KDV oranı"
+                  className="h-8 w-[4.75rem] min-h-8 px-2 py-0 text-xs"
+                  value={String(taxRate)}
+                  onChange={(e) =>
+                    setTaxRate(e.target.value === "20" ? 20 : 10)
+                  }
+                >
+                  <option value="10">%10</option>
+                  <option value="20">%20</option>
+                </Select>
+              </dt>
+              <dd className="font-mono text-zinc-100">
+                {formatTry(summary.taxTotal)} ₺
+              </dd>
+            </div>
             <div className="my-2 border-t border-blue-500/20" />
             <SummaryRow
               label="TOPLAM"
@@ -543,8 +824,12 @@ export function NewInvoiceForm({
         {isPending ? (
           <>
             <Loader2 className="size-4 animate-spin" />
-            Bizim Hesap’a gönderiliyor…
+            {isEDocument
+              ? "Taslak kaydediliyor…"
+              : "Bizim Hesap’a gönderiliyor…"}
           </>
+        ) : isEDocument ? (
+          "Kaydet"
         ) : (
           "Faturayı Oluştur"
         )}

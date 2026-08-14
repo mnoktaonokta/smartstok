@@ -1,7 +1,6 @@
 import Link from "next/link";
 import {
   ClipboardList,
-  FilePlus2,
   Package,
   Radio,
   Wallet,
@@ -13,7 +12,6 @@ import {
 } from "@/components/dashboard/dashboard-charts";
 import { CriticalStockPanel } from "@/components/dashboard/critical-stock-panel";
 import { ThemeToggle } from "@/components/dashboard/theme-toggle";
-import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -30,11 +28,9 @@ function formatTry(n: number) {
 
 export function AdminDashboard({
   data,
-  canMutate = true,
   showCriticalStocks = false,
 }: {
   data: DashboardData;
-  canMutate?: boolean;
   showCriticalStocks?: boolean;
 }) {
   const { stats } = data;
@@ -83,24 +79,7 @@ export function AdminDashboard({
           </p>
         </div>
 
-        <div className="flex flex-col items-stretch gap-2 sm:items-end">
-          <ThemeToggle />
-          <div className="flex flex-wrap gap-2 sm:justify-end">
-            <Link
-              href="/dashboard/uts-tracking"
-              className={buttonVariants({ variant: "outline" })}
-            >
-              <Radio className="size-4" />
-              ÜTS Takibine Git
-            </Link>
-            {canMutate ? (
-              <Link href="/dashboard/invoices/new" className={buttonVariants()}>
-                <FilePlus2 className="size-4" />
-                Yeni Satış / Fatura
-              </Link>
-            ) : null}
-          </div>
-        </div>
+        <ThemeToggle />
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">

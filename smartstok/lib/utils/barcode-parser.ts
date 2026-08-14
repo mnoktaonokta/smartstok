@@ -3,7 +3,8 @@
  *
  * Örnek karekod: 01086850596032221125111910P25031119M0100
  * - 01 + 14 hane GTIN → EAN (baştaki 0 atılırsa 13 hane): 8685059603222
- * - 11 + YYMMDD üretim tarihi → SKT = üretim + 5 yıl (DD.MM.YYYY)
+ * - 11 + YYMMDD → Üretim tarihi (URT); SKT yoksa üretim + 5 yıl
+ * - 17 + YYMMDD → Son kullanma (SKT) — markaya göre varsa
  * - 10 + kalan → Lot
  */
 
@@ -11,8 +12,15 @@ export type BarcodeParseResult = {
   type: "EAN" | "QR";
   barkod: string;
   lot?: string;
-  /** Son kullanma tarihi — DD.MM.YYYY */
+  /**
+   * Son kullanma — DD.MM.YYYY
+   * AI(17) varsa ondan; yoksa AI(11) üretim + 5 yıl.
+   */
   skt?: string;
+  /** Üretim tarihi — DD.MM.YYYY (GS1 AI 11) */
+  productionDate?: string;
+  /** Üretim — YYMMDD (GİB URT) */
+  productionYymmdd?: string;
 };
 
 /** DD.MM.YYYY → YYYY-MM-DD (HTML date input için) */
@@ -21,6 +29,17 @@ export function sktToDateInputValue(skt: string | undefined): string {
   const m = skt.trim().match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
   if (!m) return "";
   return `${m[3]}-${m[2]}-${m[1]}`;
+}
+
+/** Barkod parse → form date input (YYYY-MM-DD) */
+export function datesFromBarcodeParse(parsed: BarcodeParseResult): {
+  productionDate: string;
+  expiryDate: string;
+} {
+  return {
+    productionDate: sktToDateInputValue(parsed.productionDate),
+    expiryDate: sktToDateInputValue(parsed.skt),
+  };
 }
 
 /** Ham metin GS1 / uzun karekod gibi mi? */
@@ -55,6 +74,16 @@ function formatSktFromProductionYymmdd(yymmdd: string): string | undefined {
   return `${d}.${m}.${sktYear}`;
 }
 
+function formatProductionDdMmYyyy(yymmdd: string): string | undefined {
+  if (!/^\d{6}$/.test(yymmdd)) return undefined;
+  const yy = Number(yymmdd.slice(0, 2));
+  const mm = Number(yymmdd.slice(2, 4));
+  const dd = Number(yymmdd.slice(4, 6));
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return undefined;
+  const fullYear = yy >= 80 ? 1900 + yy : 2000 + yy;
+  return `${String(dd).padStart(2, "0")}.${String(mm).padStart(2, "0")}.${fullYear}`;
+}
+
 function normalizeGtinToEan(gtin14: string): string {
   const digits = gtin14.replace(/\D/g, "");
   if (digits.length === 14 && digits.startsWith("0")) {
@@ -80,6 +109,8 @@ function parseParenthesesGs1(raw: string): BarcodeParseResult | null {
     barkod: normalizeGtinToEan(gtin.padStart(14, "0").slice(-14)),
     lot: lot || undefined,
     skt: prod ? formatSktFromProductionYymmdd(prod) : undefined,
+    productionYymmdd: prod || undefined,
+    productionDate: prod ? formatProductionDdMmYyyy(prod) : undefined,
   };
 }
 
@@ -95,9 +126,13 @@ function parseContinuousGs1(raw: string): BarcodeParseResult | null {
   let rest = head[2] ?? "";
   let lot: string | undefined;
   let skt: string | undefined;
+  let productionYymmdd: string | undefined;
+  let productionDate: string | undefined;
 
   const ai11 = rest.match(/^11(\d{6})(.*)$/);
   if (ai11) {
+    productionYymmdd = ai11[1];
+    productionDate = formatProductionDdMmYyyy(ai11[1]);
     skt = formatSktFromProductionYymmdd(ai11[1]);
     rest = ai11[2] ?? "";
   }
@@ -124,6 +159,8 @@ function parseContinuousGs1(raw: string): BarcodeParseResult | null {
     barkod: normalizeGtinToEan(gtin14),
     lot,
     skt,
+    productionYymmdd,
+    productionDate,
   };
 }
 

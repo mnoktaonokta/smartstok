@@ -5,6 +5,8 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { calcLineAmounts } from "@/services/bizimHesap";
+import { getOrCreateCompanySettings } from "@/lib/services/erp/company-settings";
+import { buildInvoiceDocumentNote } from "@/lib/services/edocument/invoice-note";
 import { ErpFactory } from "@/lib/services/erp/ErpFactory";
 import type { DraftInvoiceData } from "@/lib/services/erp/types";
 import { assertCanMutate } from "@/lib/roles";
@@ -42,6 +44,8 @@ export async function getInvoiceFormDataAction() {
       taxOffice: true,
       address: true,
       phone: true,
+      isPublicEntity: true,
+      spendingUnitVkn: true,
       locations: {
         where: { type: "CLINIC_DEPOT" },
         select: { id: true, name: true },
@@ -55,11 +59,27 @@ export async function getInvoiceFormDataAction() {
 
 export async function getLocationStockForInvoiceAction(
   locationId: string,
+  /** Düzenlenen taslak için bu faturaya rezerve edilmiş stok da listelenir */
+  draftInvoiceId?: string,
 ): Promise<InvoiceStockRow[]> {
+  let reservedIds: string[] = [];
+  if (draftInvoiceId) {
+    const draft = await prisma.invoice.findFirst({
+      where: { id: draftInvoiceId, docStatus: "DRAFT" },
+      include: { items: { select: { stockItemId: true } } },
+    });
+    if (draft) {
+      reservedIds = draft.items.map((d) => d.stockItemId);
+    }
+  }
+
   const items = await prisma.stockItem.findMany({
     where: {
       locationId,
-      isAvailable: true,
+      OR: [
+        { isAvailable: true },
+        ...(reservedIds.length > 0 ? [{ id: { in: reservedIds } }] : []),
+      ],
     },
     include: {
       product: {
@@ -253,10 +273,14 @@ export async function createInvoiceAction(
     const due = new Date(now);
     due.setDate(due.getDate() + 30);
     const invoiceNo = `SD-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${Date.now().toString(36).toUpperCase()}`;
+    const settings = await getOrCreateCompanySettings();
 
     const draft: DraftInvoiceData = {
       invoiceNo,
-      note: parsed.data.note || "SmartStok konsinye faturalandırma",
+      note: buildInvoiceDocumentNote(
+        parsed.data.note,
+        settings.bankAccountInfo,
+      ),
       invoiceDate: now.toISOString(),
       dueDate: due.toISOString(),
       deliveryDate: now.toISOString(),
@@ -359,6 +383,7 @@ export async function createInvoiceAction(
 
 export async function listInvoicesAction() {
   const invoices = await prisma.invoice.findMany({
+    omit: { pdfData: true },
     include: {
       customer: { select: { name: true, vknTckn: true } },
       items: { select: { id: true, salePrice: true, discount: true } },
@@ -373,9 +398,16 @@ export async function listInvoicesAction() {
       (s, i) => s + Number(i.salePrice) - Number(i.discount),
       0,
     );
+    const hasPdf = Boolean(
+      inv.externalViewUrl ||
+        (inv.eDocumentProvider &&
+          inv.docStatus === "COMPLETED" &&
+          (inv.documentType === "EARCHIVE" || inv.documentType === "EINVOICE")),
+    );
     return {
       id: inv.id,
       invoiceNo: inv.invoiceNo,
+      faturaNo: inv.faturaNo,
       createdAt: inv.createdAt.toISOString(),
       customerName: inv.customer?.name ?? "—",
       customerVkn: inv.customer?.vknTckn ?? "—",
@@ -383,6 +415,13 @@ export async function listInvoicesAction() {
       netApprox: gross.toFixed(2),
       bizimHesapGuid: inv.bizimHesapGuid,
       bizimHesapUrl: inv.bizimHesapUrl,
+      documentType: inv.documentType,
+      eDocumentProvider: inv.eDocumentProvider,
+      docStatus: inv.docStatus,
+      uuid: inv.uuid,
+      belgeOid: inv.belgeOid,
+      hasPdf,
+      lastError: inv.lastError,
     };
   });
 }

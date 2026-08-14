@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { BarcodeInput } from "@/components/ui/barcode-input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { datesFromBarcodeParse } from "@/lib/utils/barcode-parser";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +27,8 @@ const emptyForm = {
   diameter: "",
   length: "",
   barcode: "",
+  productionDate: "",
+  expiryDate: "",
   purchasePrice: "",
   salePrice: "",
   minStockLevel: "0",
@@ -66,6 +69,8 @@ export function AddProductDialog({
         diameter: form.diameter ? Number(form.diameter) : null,
         length: form.length ? Number(form.length) : null,
         barcode: form.barcode || null,
+        productionDate: form.productionDate || null,
+        expiryDate: form.expiryDate || null,
         purchasePrice: showPurchasePrice ? Number(form.purchasePrice) : 0,
         salePrice: showSalePrice ? Number(form.salePrice) : 0,
         minStockLevel: Number(form.minStockLevel || 0),
@@ -170,15 +175,52 @@ export function AddProductDialog({
                 disabled={isPending}
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="productionDate">Üretim Tarihi (URT)</Label>
+              <Input
+                id="productionDate"
+                type="date"
+                value={form.productionDate}
+                onChange={(e) => setField("productionDate", e.target.value)}
+                disabled={isPending}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="expiryDate">Son Kullanma Tarihi (SKT)</Label>
+              <Input
+                id="expiryDate"
+                type="date"
+                value={form.expiryDate}
+                onChange={(e) => setField("expiryDate", e.target.value)}
+                disabled={isPending}
+              />
+            </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="barcode">Barkod</Label>
               <BarcodeInput
                 id="barcode"
                 value={form.barcode}
                 onValueChange={(v) => setField("barcode", v)}
+                onParsed={(parsed) => {
+                  const dates = datesFromBarcodeParse(parsed);
+                  setForm((prev) => ({
+                    ...prev,
+                    barcode: parsed.barkod || prev.barcode,
+                    ...(dates.productionDate
+                      ? { productionDate: dates.productionDate }
+                      : {}),
+                    ...(dates.expiryDate
+                      ? { expiryDate: dates.expiryDate }
+                      : {}),
+                  }));
+                }}
                 placeholder="Barkod veya karekod okutun…"
                 disabled={isPending}
               />
+              <p className="text-xs text-zinc-500">
+                Karekodda üretim tarihi (AI 11) varsa URT doldurulur; SKT şu an
+                için URT + 5 yıl yazılır.
+              </p>
             </div>
             {showPurchasePrice ? (
               <div className="space-y-2">

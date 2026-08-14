@@ -5,6 +5,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { assertCanMutate, mutationDeniedMessage } from "@/lib/roles";
+import { resolveActingUserId } from "@/lib/resolve-acting-user";
 
 export type BarcodeScanLot = {
   lotNumber: string;
@@ -124,6 +125,9 @@ export async function executeBasketTransferAction(
     }
     assertCanMutate(session.user.roles);
 
+    const actor = await resolveActingUserId(session.user);
+    if (!actor.ok) return { error: actor.error };
+
     const parsed = basketTransferSchema.safeParse(input);
     if (!parsed.success) {
       return { error: parsed.error.issues[0]?.message ?? "Geçersiz sepet." };
@@ -186,7 +190,7 @@ export async function executeBasketTransferAction(
           fromLocationId: fromLocation.id,
           toLocationId: toLocation.id,
           stockItemId,
-          executedById: session.user.id,
+          executedById: actor.userId,
           requestedById: requester.id,
         })),
       });

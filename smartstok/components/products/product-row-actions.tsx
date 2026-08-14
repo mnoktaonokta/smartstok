@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { BarcodeInput } from "@/components/ui/barcode-input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { datesFromBarcodeParse } from "@/lib/utils/barcode-parser";
 import {
   Dialog,
   DialogContent,
@@ -50,7 +51,9 @@ export function ProductRowActions({
     diameter: product.diameter?.toString() ?? "",
     length: product.length?.toString() ?? "",
     barcode: product.barcode ?? "",
-    quantity: product.stockCount.toString(),
+    productionDate: product.productionDate ?? "",
+    expiryDate: product.expiryDate ?? "",
+    quantity: product.mainDepotStockCount.toString(),
     purchasePrice: product.purchasePrice ?? "",
     salePrice: product.salePrice,
     minStockLevel: product.minStockLevel.toString(),
@@ -76,7 +79,9 @@ export function ProductRowActions({
       diameter: product.diameter?.toString() ?? "",
       length: product.length?.toString() ?? "",
       barcode: product.barcode ?? "",
-      quantity: product.stockCount.toString(),
+      productionDate: product.productionDate ?? "",
+      expiryDate: product.expiryDate ?? "",
+      quantity: product.mainDepotStockCount.toString(),
       purchasePrice: product.purchasePrice ?? product.salePrice,
       salePrice: product.salePrice,
       minStockLevel: product.minStockLevel.toString(),
@@ -102,6 +107,8 @@ export function ProductRowActions({
         diameter: form.diameter ? Number(form.diameter) : null,
         length: form.length ? Number(form.length) : null,
         barcode: form.barcode || null,
+        productionDate: form.productionDate || null,
+        expiryDate: form.expiryDate || null,
         ...(showSalePrice ? { salePrice: Number(form.salePrice || 0) } : {}),
         ...(showPurchasePrice
           ? { purchasePrice: Number(form.purchasePrice || 0) }
@@ -234,6 +241,19 @@ export function ProductRowActions({
                 id={`edit-barcode-${product.id}`}
                 value={form.barcode}
                 onValueChange={(v) => setField("barcode", v)}
+                onParsed={(parsed) => {
+                  const dates = datesFromBarcodeParse(parsed);
+                  setForm((prev) => ({
+                    ...prev,
+                    barcode: parsed.barkod || prev.barcode,
+                    ...(dates.productionDate
+                      ? { productionDate: dates.productionDate }
+                      : {}),
+                    ...(dates.expiryDate
+                      ? { expiryDate: dates.expiryDate }
+                      : {}),
+                  }));
+                }}
                 placeholder="Barkod veya karekod okutun…"
                 disabled={isPending}
               />
@@ -298,6 +318,30 @@ export function ProductRowActions({
                 step="0.1"
                 value={form.length}
                 onChange={(e) => setField("length", e.target.value)}
+                disabled={isPending}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`edit-urt-${product.id}`}>
+                Üretim Tarihi (URT)
+              </Label>
+              <Input
+                id={`edit-urt-${product.id}`}
+                type="date"
+                value={form.productionDate}
+                onChange={(e) => setField("productionDate", e.target.value)}
+                disabled={isPending}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`edit-skt-${product.id}`}>
+                Son Kullanma Tarihi (SKT)
+              </Label>
+              <Input
+                id={`edit-skt-${product.id}`}
+                type="date"
+                value={form.expiryDate}
+                onChange={(e) => setField("expiryDate", e.target.value)}
                 disabled={isPending}
               />
             </div>

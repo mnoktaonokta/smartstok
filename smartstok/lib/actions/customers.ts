@@ -22,16 +22,38 @@ const vknSchema = z
   .trim()
   .regex(/^\d{10,11}$/, "VKN 10, TCKN 11 haneli olmalıdır.");
 
-const createCustomerSchema = z.object({
-  vknTckn: vknSchema,
-  name: z.string().trim().min(2, "Ünvan gerekli."),
-  taxOffice: z.string().trim().optional(),
-  address: z.string().trim().optional(),
-  phone: z.string().trim().optional(),
-  bizimHesapId: z.string().trim().optional(),
-  utsInstitutionNumber: z.string().trim().optional().nullable(),
-  assignedUserId: z.string().min(1).optional().nullable(),
-});
+const createCustomerSchema = z
+  .object({
+    vknTckn: vknSchema,
+    name: z.string().trim().min(2, "Ünvan gerekli."),
+    taxOffice: z.string().trim().optional().nullable(),
+    address: z.string().trim().optional().nullable(),
+    phone: z.string().trim().optional().nullable(),
+    bizimHesapId: z.string().trim().optional().nullable(),
+    utsInstitutionNumber: z.string().trim().optional().nullable(),
+    assignedUserId: z.string().min(1).optional().nullable(),
+    isPublicEntity: z.boolean(),
+    spendingUnitVkn: z.string().trim().optional().nullable(),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.isPublicEntity) return;
+    const unit = (data.spendingUnitVkn ?? "").replace(/\D/g, "");
+    if (!/^\d{10}$/.test(unit)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["spendingUnitVkn"],
+        message: "Kamu kurumu için Harcama Birimi VKN (10 hane) zorunludur.",
+      });
+      return;
+    }
+    if (unit === data.vknTckn.replace(/\D/g, "")) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["spendingUnitVkn"],
+        message: "Harcama Birimi VKN, ana VKN’den farklı olmalıdır.",
+      });
+    }
+  });
 
 export async function createCustomerWithDepotAction(
   input: z.infer<typeof createCustomerSchema>,
@@ -85,6 +107,10 @@ export async function createCustomerWithDepotAction(
           phone: parsed.data.phone || null,
           bizimHesapId: parsed.data.bizimHesapId || null,
           utsInstitutionNumber: parsed.data.utsInstitutionNumber || null,
+          isPublicEntity: parsed.data.isPublicEntity,
+          spendingUnitVkn: parsed.data.isPublicEntity
+            ? (parsed.data.spendingUnitVkn ?? "").replace(/\D/g, "")
+            : null,
           assignedUserId,
         },
       });
@@ -246,15 +272,29 @@ export async function assignCustomerRepAction(input: {
   }
 }
 
-const updateCustomerSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().trim().min(2, "Ünvan gerekli."),
-  taxOffice: z.string().trim().optional(),
-  address: z.string().trim().optional(),
-  phone: z.string().trim().optional(),
-  bizimHesapId: z.string().trim().optional(),
-  utsInstitutionNumber: z.string().trim().optional().nullable(),
-});
+const updateCustomerSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().trim().min(2, "Ünvan gerekli."),
+    taxOffice: z.string().trim().optional().nullable(),
+    address: z.string().trim().optional().nullable(),
+    phone: z.string().trim().optional().nullable(),
+    bizimHesapId: z.string().trim().optional().nullable(),
+    utsInstitutionNumber: z.string().trim().optional().nullable(),
+    isPublicEntity: z.boolean(),
+    spendingUnitVkn: z.string().trim().optional().nullable(),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.isPublicEntity) return;
+    const unit = (data.spendingUnitVkn ?? "").replace(/\D/g, "");
+    if (!/^\d{10}$/.test(unit)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["spendingUnitVkn"],
+        message: "Kamu kurumu için Harcama Birimi VKN (10 hane) zorunludur.",
+      });
+    }
+  });
 
 export async function updateCustomerAction(
   input: z.infer<typeof updateCustomerSchema>,
@@ -292,6 +332,16 @@ export async function updateCustomerAction(
       return { error: "Bu müşteri portföyünüzde değil." };
     }
 
+    if (
+      parsed.data.isPublicEntity &&
+      (parsed.data.spendingUnitVkn ?? "").replace(/\D/g, "") ===
+        existing.vknTckn.replace(/\D/g, "")
+    ) {
+      return {
+        error: "Harcama Birimi VKN, ana VKN’den farklı olmalıdır.",
+      };
+    }
+
     await prisma.$transaction(async (tx) => {
       await tx.customer.update({
         where: { id: parsed.data.id },
@@ -302,6 +352,10 @@ export async function updateCustomerAction(
           phone: parsed.data.phone || null,
           bizimHesapId: parsed.data.bizimHesapId || null,
           utsInstitutionNumber: parsed.data.utsInstitutionNumber || null,
+          isPublicEntity: parsed.data.isPublicEntity,
+          spendingUnitVkn: parsed.data.isPublicEntity
+            ? (parsed.data.spendingUnitVkn ?? "").replace(/\D/g, "")
+            : null,
         },
       });
 
@@ -322,8 +376,26 @@ export async function updateCustomerAction(
   } catch (error) {
     const denied = mutationDeniedMessage(error);
     if (denied) return { error: denied };
-    console.error(error);
-    return { error: "Müşteri güncellenirken bir hata oluştu." };
+    console.error("[updateCustomerAction]", error);
+    const msg =
+      error instanceof Error
+        ? error.message.replace(/\s+/g, " ").trim().slice(0, 280)
+        : "";
+    if (
+      /isPublicEntity|spendingUnitVkn|Unknown argument|column .* does not exist/i.test(
+        msg,
+      )
+    ) {
+      return {
+        error:
+          "Kamu alanları veritabanında yok veya Prisma istemcisi eski. Proje kökünde `npx prisma db push` ve `npx prisma generate` çalıştırıp sunucuyu yeniden başlatın.",
+      };
+    }
+    return {
+      error: msg
+        ? `Müşteri güncellenemedi: ${msg}`
+        : "Müşteri güncellenirken bir hata oluştu.",
+    };
   }
 }
 

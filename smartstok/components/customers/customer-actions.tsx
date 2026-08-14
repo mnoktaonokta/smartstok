@@ -28,6 +28,8 @@ export type CustomerRow = {
   phone: string | null;
   bizimHesapId: string | null;
   utsInstitutionNumber: string | null;
+  isPublicEntity?: boolean;
+  spendingUnitVkn?: string | null;
 };
 
 export function CustomerActions({
@@ -61,6 +63,12 @@ export function CustomerActions({
   const [utsInstitutionNumber, setUtsInstitutionNumber] = useState(
     customer.utsInstitutionNumber ?? "",
   );
+  const [isPublicEntity, setIsPublicEntity] = useState(
+    () => Boolean(customer.isPublicEntity),
+  );
+  const [spendingUnitVkn, setSpendingUnitVkn] = useState(
+    () => customer.spendingUnitVkn ?? "",
+  );
 
   function openEdit() {
     setName(customer.name);
@@ -69,6 +77,8 @@ export function CustomerActions({
     setPhone(customer.phone ?? "");
     setBizimHesapId(customer.bizimHesapId ?? "");
     setUtsInstitutionNumber(customer.utsInstitutionNumber ?? "");
+    setIsPublicEntity(Boolean(customer.isPublicEntity));
+    setSpendingUnitVkn(customer.spendingUnitVkn ?? "");
     setError(null);
     setToast(null);
     setEditOpen(true);
@@ -85,6 +95,10 @@ export function CustomerActions({
         phone,
         bizimHesapId,
         utsInstitutionNumber: utsInstitutionNumber || null,
+        isPublicEntity: Boolean(isPublicEntity),
+        spendingUnitVkn: isPublicEntity
+          ? spendingUnitVkn.replace(/\D/g, "") || null
+          : null,
       });
 
       if (result.error) {
@@ -225,6 +239,50 @@ export function CustomerActions({
               required
             />
           </div>
+
+          <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-1 size-4 rounded border-zinc-600"
+                checked={Boolean(isPublicEntity)}
+                disabled={isPending}
+                onChange={(e) => {
+                  setIsPublicEntity(e.target.checked);
+                  if (!e.target.checked) setSpendingUnitVkn("");
+                }}
+              />
+              <span>
+                <span className="block text-sm font-medium text-zinc-200">
+                  Cari bir kamu kurumu mu?
+                </span>
+                <span className="mt-0.5 block text-xs text-zinc-500">
+                  Fatura senaryosu KAMUFATURASI; ana VKN muhasebe, ikinci VKN
+                  harcama birimi.
+                </span>
+              </span>
+            </label>
+            {isPublicEntity ? (
+              <div className="space-y-2 pl-7">
+                <Label htmlFor={`spend-${customer.id}`}>
+                  Harcama Birimi VKN
+                </Label>
+                <Input
+                  id={`spend-${customer.id}`}
+                  value={spendingUnitVkn}
+                  onChange={(e) =>
+                    setSpendingUnitVkn(e.target.value.replace(/\D/g, ""))
+                  }
+                  placeholder="10 haneli VKN"
+                  maxLength={10}
+                  className="font-mono"
+                  disabled={isPending}
+                  required
+                />
+              </div>
+            ) : null}
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor={`tax-${customer.id}`}>Vergi Dairesi</Label>
             <Input
@@ -286,7 +344,14 @@ export function CustomerActions({
           >
             İptal
           </Button>
-          <Button type="button" onClick={handleUpdate} disabled={isPending}>
+          <Button
+            type="button"
+            onClick={handleUpdate}
+            disabled={
+              isPending ||
+              (isPublicEntity && spendingUnitVkn.replace(/\D/g, "").length !== 10)
+            }
+          >
             {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
             Kaydet
           </Button>

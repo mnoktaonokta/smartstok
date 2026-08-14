@@ -29,6 +29,8 @@ const emptyForm = {
   bizimHesapId: "",
   utsInstitutionNumber: "",
   assignedUserId: "",
+  isPublicEntity: false,
+  spendingUnitVkn: "",
 };
 
 export function AddCustomerDialog({
@@ -65,7 +67,10 @@ export function AddCustomerDialog({
     if (!next) reset();
   }
 
-  function setField(key: keyof typeof emptyForm, value: string) {
+  function setField(
+    key: keyof typeof emptyForm,
+    value: string | boolean,
+  ) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -83,6 +88,10 @@ export function AddCustomerDialog({
         assignedUserId: showRepSelect
           ? form.assignedUserId || null
           : undefined,
+        isPublicEntity: Boolean(form.isPublicEntity),
+        spendingUnitVkn: form.isPublicEntity
+          ? form.spendingUnitVkn.replace(/\D/g, "") || null
+          : null,
       });
 
       if (result.error) {
@@ -197,6 +206,50 @@ export function AddCustomerDialog({
             />
           </div>
 
+          <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-1 size-4 rounded border-zinc-600"
+                checked={Boolean(form.isPublicEntity)}
+                disabled={isPending}
+                onChange={(e) => {
+                  setField("isPublicEntity", e.target.checked);
+                  if (!e.target.checked) setField("spendingUnitVkn", "");
+                }}
+              />
+              <span>
+                <span className="block text-sm font-medium text-zinc-200">
+                  Cari bir kamu kurumu mu?
+                </span>
+                <span className="mt-0.5 block text-xs text-zinc-500">
+                  İşaretlenince fatura senaryosu KAMUFATURASI olur; ana VKN
+                  muhasebe birimi, harcama birimi ayrı VKN ile gider.
+                </span>
+              </span>
+            </label>
+            {form.isPublicEntity ? (
+              <div className="space-y-2 pl-7">
+                <Label htmlFor="spending-unit-vkn">Harcama Birimi VKN</Label>
+                <Input
+                  id="spending-unit-vkn"
+                  value={form.spendingUnitVkn}
+                  onChange={(e) =>
+                    setField(
+                      "spendingUnitVkn",
+                      e.target.value.replace(/\D/g, ""),
+                    )
+                  }
+                  placeholder="10 haneli VKN (fakülte / birim)"
+                  maxLength={10}
+                  className="font-mono"
+                  disabled={isPending}
+                  required
+                />
+              </div>
+            ) : null}
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="tax-office">Vergi Dairesi</Label>
             <Input
@@ -306,7 +359,8 @@ export function AddCustomerDialog({
             disabled={
               isPending ||
               form.vknTckn.length < 10 ||
-              form.name.trim().length < 2
+              form.name.trim().length < 2 ||
+              (form.isPublicEntity && form.spendingUnitVkn.length !== 10)
             }
           >
             {isPending ? <Loader2 className="size-4 animate-spin" /> : null}

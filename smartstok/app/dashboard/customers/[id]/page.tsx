@@ -60,6 +60,9 @@ export default async function CustomerDetailPage({
         </div>
         <p className="mt-2 text-sm text-zinc-400">
           VKN {customer.vknTckn}
+          {customer.isPublicEntity
+            ? ` · Kamu · Harcama birimi: ${customer.spendingUnitVkn ?? "—"}`
+            : ""}
           {customer.bizimHesapId
             ? ` · Bizim Hesap: ${customer.bizimHesapId}`
             : " · Bizim Hesap cari kodu tanımlı değil"}

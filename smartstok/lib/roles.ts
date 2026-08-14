@@ -30,6 +30,7 @@ export const NAV_PATH_ORDER = [
   "/dashboard/fail-yonetimi",
   "/dashboard/malkabul",
   "/dashboard/sayim",
+  "/dashboard/e-belge-fatura",
   "/dashboard/invoices",
   "/dashboard/uts-tracking",
 ] as const;
@@ -43,6 +44,7 @@ const ROLE_PAGE_PREFIXES: Record<Exclude<UserRole, "ADMIN">, string[]> = {
   MUHASEBE: [
     "/dashboard", // yalnızca özet (tam eşleşme ayrı kontrol)
     "/dashboard/customers",
+    "/dashboard/e-belge-fatura",
     "/dashboard/invoices",
     "/dashboard/uts-tracking",
     "/dashboard/products",
@@ -71,6 +73,7 @@ const ROLE_PAGE_PREFIXES: Record<Exclude<UserRole, "ADMIN">, string[]> = {
     "/dashboard/fail-yonetimi",
     "/dashboard/depots",
     "/dashboard/customers",
+    "/dashboard/e-belge-fatura",
     "/dashboard/invoices",
     "/dashboard/uts-tracking",
   ],

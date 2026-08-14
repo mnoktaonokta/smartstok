@@ -14,6 +14,7 @@ import {
   Package,
   PackagePlus,
   Radio,
+  Receipt,
   Users,
   Warehouse,
   X,
@@ -37,6 +38,7 @@ const navItems = [
   { href: "/dashboard/fail-yonetimi", label: "Fail Yönetimi", icon: AlertTriangle },
   { href: "/dashboard/malkabul", label: "Mal Kabul", icon: PackagePlus },
   { href: "/dashboard/sayim", label: "Stok Sayımı", icon: ClipboardList },
+  { href: "/dashboard/e-belge-fatura", label: "E-belge fatura", icon: Receipt },
   { href: "/dashboard/invoices", label: "Faturalar", icon: FileText },
   { href: "/dashboard/uts-tracking", label: "ÜTS", icon: Radio },
 ] as const;

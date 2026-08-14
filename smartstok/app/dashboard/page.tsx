@@ -5,7 +5,7 @@ import {
   getSalesDashboardDataAction,
   getWarehouseDashboardDataAction,
 } from "@/lib/actions/dashboard";
-import { getDashboardVariant, canMutateData, hasRole } from "@/lib/roles";
+import { getDashboardVariant, hasRole } from "@/lib/roles";
 import { AdminDashboard } from "@/components/dashboard/admin-dashboard";
 import { SalesDashboard } from "@/components/dashboard/sales-dashboard";
 import { WarehouseDashboard } from "@/components/dashboard/warehouse-dashboard";
@@ -18,7 +18,6 @@ export default async function DashboardPage() {
 
   const roles = session.user.roles ?? [];
   const variant = getDashboardVariant(roles);
-  const canMutate = canMutateData(roles);
 
   if (variant === "warehouse") {
     const data = await getWarehouseDashboardDataAction();
@@ -34,7 +33,6 @@ export default async function DashboardPage() {
   return (
     <AdminDashboard
       data={data}
-      canMutate={canMutate}
       showCriticalStocks={hasRole(roles, "ADMIN")}
     />
   );

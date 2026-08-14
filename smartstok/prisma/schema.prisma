@@ -63,6 +63,27 @@ enum ErpProvider {
   PARASUT
 }
 
+/** E-belge özel entegratör (QNB / e-Logo) — muhasebe ERP'den ayrı */
+enum EDocumentProvider {
+  QNB
+  ELOGO
+}
+
+enum EDocumentType {
+  EARCHIVE
+  EINVOICE
+}
+
+enum InvoiceDocStatus {
+  DRAFT
+  /** e-İrsaliye kesildi, fatura bekliyor */
+  DESPATCHED
+  SENT
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 model User {
   id                  String   @id @default(cuid())
   email               String   @unique
@@ -99,6 +120,10 @@ model Product {
   purchasePrice  Decimal  @db.Decimal(12, 2)
   salePrice      Decimal  @db.Decimal(12, 2)
   barcode        String?  @unique
+  /** Katalog varsayılanı — lot bazlı değer mal kabulde StockItem’a yazılır */
+  productionDate DateTime?
+  /** Katalog varsayılanı SKT */
+  expiryDate     DateTime?
   /** 0 = alarm kapalı; stok bu değere ve altına düşünce uyarı */
   minStockLevel  Int      @default(0)
   isActive       Boolean  @default(true)
@@ -125,6 +150,10 @@ model Customer {
   bizimHesapId   String?
   /** ÜTS kurum numarası (VKN ile sorgulanır) */
   utsInstitutionNumber String?
+  /** Kamu kurumu (üniversite vb.) — e-Fatura KAMUFATURASI */
+  isPublicEntity Boolean  @default(false)
+  /** Harcama birimi VKN (fakülte vb.) — BuyerCustomerParty */
+  spendingUnitVkn String?
   /** Saha satış temsilcisi (portföy) */
   assignedUserId String?
   assignedUser   User?    @relation("AssignedCustomers", fields: [assignedUserId], references: [id])
@@ -162,6 +191,8 @@ model StockItem {
   product      Product   @relation(fields: [productId], references: [id])
   lotNumber    String
   serialNumber String?
+  /** Üretim tarihi (ÜTS URT) — GS1 AI(11) */
+  productionDate DateTime?
   /** Son kullanma tarihi (SKT) */
   expiryDate   DateTime?
   locationId   String
@@ -206,12 +237,39 @@ model Invoice {
   customer       Customer? @relation(fields: [customerId], references: [id])
   bizimHesapGuid String?
   bizimHesapUrl  String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+
+  documentType      EDocumentType?
+  eDocumentProvider EDocumentProvider?
+  docStatus         InvoiceDocStatus   @default(DRAFT)
+  /** ETTN / UUID */
+  uuid              String?
+  belgeOid          String?
+  /** Resmi fatura numarası (QNB) */
+  faturaNo          String?
+  pdfData           Bytes?
+  externalViewUrl   String?
+  lastError         String?            @db.Text
+  note              String?
+  /** Taslağın bağlı olduğu konsinye deposu */
+  locationId        String?
+  /** e-İrsaliye ETTN */
+  despatchUuid      String?
+  despatchBelgeOid  String?
+  despatchedAt      DateTime?
+  /** GİB e-İrsaliye belge no (örn. SSI2026000000001) */
+  despatchNo        String?
+  /** e-İrsaliye PDF (fatura pdfData’dan ayrı) */
+  despatchPdfData   Bytes?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   items InvoiceItem[]
 
   @@index([customerId])
+  @@index([docStatus])
+  @@index([belgeOid])
+  @@index([locationId])
 }
 
 model InvoiceItem {
@@ -333,11 +391,33 @@ model CompanySettings {
   parasutUsername     String?
   parasutPassword     String?
 
-  /** e-Logo */
+  /** e-Logo (muhasebe ERP stub) */
   logoFirmNo   String?
   logoApiKey   String?
   logoUsername String?
   logoPassword String?
+
+  /** E-belge sağlayıcısı (QNB / e-Logo) */
+  eDocumentProvider EDocumentProvider @default(QNB)
+  qnbUsername       String?
+  qnbPassword       String?
+  qnbErpKodu        String?
+  qnbVkn            String?
+  /** TEST | LIVE */
+  qnbEnvironment    String?
+
+  /** e-Logo PostBoxService (e-belge) */
+  elogoUsername    String?
+  elogoPassword    String?
+  /** TEST | LIVE */
+  elogoEnvironment String?
+
+  /** Firma logosu (fatura görseli için) */
+  logoData     Bytes?
+  logoMimeType String?
+
+  /** Fatura açıklamasına eklenecek banka hesap metni */
+  bankAccountInfo String? @db.Text
 
   /** SaaS lisans bitiş tarihi — geçtiyse dashboard kilitlenir */
   licenseEndDate DateTime?

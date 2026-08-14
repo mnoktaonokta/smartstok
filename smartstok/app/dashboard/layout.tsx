@@ -37,12 +37,14 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex min-h-screen bg-background">
-      <div className="dashboard-ambient pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top_left,_rgba(37,99,235,0.12),_transparent_45%)]" />
-      <DashboardSidebar
-        userName={session.user.name ?? session.user.email ?? "Kullanıcı"}
-        userRoles={session.user.roles ?? []}
-      />
-      <main className="relative z-10 flex-1 overflow-auto px-4 pt-16 pb-6 sm:px-6 md:p-8 md:pt-8">
+      <div className="dashboard-ambient pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top_left,_rgba(37,99,235,0.12),_transparent_45%)] print:hidden" />
+      <div className="no-print print:hidden">
+        <DashboardSidebar
+          userName={session.user.name ?? session.user.email ?? "Kullanıcı"}
+          userRoles={session.user.roles ?? []}
+        />
+      </div>
+      <main className="relative z-10 flex-1 overflow-auto px-4 pt-16 pb-6 sm:px-6 md:p-8 md:pt-8 print:p-0">
         {children}
       </main>
     </div>

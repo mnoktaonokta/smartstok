@@ -27,12 +27,69 @@ export type ProductListItem = {
   diameter: number | null;
   length: number | null;
   barcode: string | null;
+  /** YYYY-MM-DD */
+  productionDate: string | null;
+  /** YYYY-MM-DD */
+  expiryDate: string | null;
   salePrice: string;
   purchasePrice: string | null;
+  /** Tüm lokasyonlarda müsait stok */
   stockCount: number;
+  /** Yalnızca merkez depo müsait stok (düzenleme formu) */
+  mainDepotStockCount: number;
   minStockLevel: number;
   isActive: boolean;
 };
+
+function toDateInput(d: Date | null | undefined): string | null {
+  if (!d || Number.isNaN(d.getTime())) return null;
+  // UTC kayması olmasın diye yerel Y-M-D
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** HTML date (YYYY-MM-DD) → Date (öğlen UTC, TZ kayması yok) */
+function parseOptionalDate(value: string | null | undefined): Date | null {
+  const s = value?.trim();
+  if (!s) return null;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    return new Date(Date.UTC(y, mo - 1, d, 12, 0, 0));
+  }
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** "" / null / undefined → null; aksi halde sayı (çap/boy) */
+const optionalPositiveNumber = z.preprocess((v) => {
+  if (v === "" || v === null || v === undefined) return null;
+  return v;
+}, z.coerce.number().positive().nullable());
+
+function prismaErrorMessage(error: unknown): string {
+  if (error && typeof error === "object") {
+    const e = error as { code?: string; message?: string; meta?: unknown };
+    if (e.code === "P2022") {
+      return "Veritabanı şeması güncel değil. Sunucuyu yeniden başlatıp tekrar deneyin.";
+    }
+    if (typeof e.message === "string" && e.message.includes("Unknown argument")) {
+      return "Uygulama önbelleği eski. `npm run dev` yeniden başlatın.";
+    }
+    if (typeof e.message === "string" && e.message.length < 240) {
+      return e.message;
+    }
+  }
+  if (error instanceof Error && error.message.length < 240) {
+    return error.message;
+  }
+  return "Ürün güncellenirken bir hata oluştu.";
+}
 
 function revalidateProductPaths() {
   revalidatePath("/dashboard/products");
@@ -66,6 +123,8 @@ export async function listProductsAction(filters?: {
     where.isActive = filters.isActive;
   }
 
+  const mainDepot = await ensureMainDepot();
+
   const products = await prisma.product.findMany({
     where,
     include: {
@@ -73,6 +132,19 @@ export async function listProductsAction(filters?: {
     },
     orderBy: [{ isActive: "desc" }, { brand: "asc" }, { referenceCode: "asc" }],
   });
+
+  const mainCounts = await prisma.stockItem.groupBy({
+    by: ["productId"],
+    where: {
+      locationId: mainDepot.id,
+      isAvailable: true,
+      productId: { in: products.map((p) => p.id) },
+    },
+    _count: { _all: true },
+  });
+  const mainCountByProduct = new Map(
+    mainCounts.map((r) => [r.productId, r._count._all]),
+  );
 
   return products.map((p) => ({
     id: p.id,
@@ -83,9 +155,12 @@ export async function listProductsAction(filters?: {
     diameter: p.diameter,
     length: p.length,
     barcode: p.barcode,
+    productionDate: toDateInput(p.productionDate),
+    expiryDate: toDateInput(p.expiryDate),
     salePrice: seeSale ? p.salePrice.toString() : "",
     purchasePrice: seePurchase ? p.purchasePrice.toString() : null,
     stockCount: p._count.stockItems,
+    mainDepotStockCount: mainCountByProduct.get(p.id) ?? 0,
     minStockLevel: p.minStockLevel,
     isActive: p.isActive,
   }));
@@ -106,9 +181,11 @@ const productFieldsSchema = z.object({
   brand: z.string().trim().min(1, "Marka gerekli."),
   category: z.string().trim().min(1, "Kategori gerekli."),
   name: z.string().trim().min(1, "Ürün adı gerekli."),
-  diameter: z.coerce.number().positive().optional().nullable(),
-  length: z.coerce.number().positive().optional().nullable(),
+  diameter: optionalPositiveNumber,
+  length: optionalPositiveNumber,
   barcode: z.string().trim().optional().nullable(),
+  productionDate: z.string().trim().optional().nullable(),
+  expiryDate: z.string().trim().optional().nullable(),
   purchasePrice: z.coerce.number().nonnegative("Alış fiyatı geçersiz."),
   salePrice: z.coerce.number().nonnegative("Satış fiyatı geçersiz."),
   /** 0 = alarm kapalı */
@@ -162,6 +239,13 @@ export async function createProductAction(
       };
     }
 
+    const productionDate = parseOptionalDate(parsed.data.productionDate);
+    let expiryDate = parseOptionalDate(parsed.data.expiryDate);
+    if (productionDate && !expiryDate) {
+      expiryDate = new Date(productionDate);
+      expiryDate.setFullYear(expiryDate.getFullYear() + 5);
+    }
+
     const product = await prisma.product.create({
       data: {
         referenceCode: parsed.data.referenceCode,
@@ -171,6 +255,8 @@ export async function createProductAction(
         diameter: parsed.data.diameter ?? null,
         length: parsed.data.length ?? null,
         barcode,
+        productionDate,
+        expiryDate,
         purchasePrice: parsed.data.purchasePrice,
         salePrice: parsed.data.salePrice,
         minStockLevel: parsed.data.minStockLevel,
@@ -192,6 +278,10 @@ export async function createProductAction(
 /** Merkez depo müsait stok miktarını hedefe ayarlar */
 async function syncMainDepotQuantity(productId: string, qty: number) {
   const mainDepot = await ensureMainDepot();
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { productionDate: true, expiryDate: true },
+  });
   const available = await prisma.stockItem.findMany({
     where: {
       productId,
@@ -210,6 +300,8 @@ async function syncMainDepotQuantity(productId: string, qty: number) {
       data: Array.from({ length: qty - current }, () => ({
         productId,
         lotNumber,
+        productionDate: product?.productionDate ?? null,
+        expiryDate: product?.expiryDate ?? null,
         locationId: mainDepot.id,
         isAvailable: true,
       })),
@@ -266,6 +358,13 @@ export async function updateProductAction(
       };
     }
 
+    const productionDate = parseOptionalDate(parsed.data.productionDate);
+    let expiryDate = parseOptionalDate(parsed.data.expiryDate);
+    if (productionDate && !expiryDate) {
+      expiryDate = new Date(productionDate);
+      expiryDate.setFullYear(expiryDate.getFullYear() + 5);
+    }
+
     await prisma.product.update({
       where: { id: parsed.data.id },
       data: {
@@ -276,6 +375,8 @@ export async function updateProductAction(
         diameter: parsed.data.diameter ?? null,
         length: parsed.data.length ?? null,
         barcode,
+        productionDate,
+        expiryDate,
         minStockLevel: parsed.data.minStockLevel,
         ...(parsed.data.salePrice != null
           ? { salePrice: parsed.data.salePrice }
@@ -290,7 +391,18 @@ export async function updateProductAction(
       parsed.data.quantity != null &&
       Number.isFinite(parsed.data.quantity)
     ) {
-      await syncMainDepotQuantity(parsed.data.id, parsed.data.quantity);
+      const mainDepot = await ensureMainDepot();
+      const mainCount = await prisma.stockItem.count({
+        where: {
+          productId: parsed.data.id,
+          locationId: mainDepot.id,
+          isAvailable: true,
+        },
+      });
+      // Miktar değişmediyse stok senkronu çalıştırma (URT/SKT kaydı şişmesin)
+      if (parsed.data.quantity !== mainCount) {
+        await syncMainDepotQuantity(parsed.data.id, parsed.data.quantity);
+      }
     }
 
     revalidateProductPaths();
@@ -299,7 +411,7 @@ export async function updateProductAction(
     const denied = mutationDeniedMessage(error);
     if (denied) return { error: denied };
     console.error("[updateProductAction]", error);
-    return { error: "Ürün güncellenirken bir hata oluştu." };
+    return { error: prismaErrorMessage(error) };
   }
 }
 

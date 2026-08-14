@@ -23,6 +23,8 @@ export type CustomerListRow = {
   phone: string | null;
   bizimHesapId: string | null;
   utsInstitutionNumber: string | null;
+  isPublicEntity: boolean;
+  spendingUnitVkn: string | null;
   assignedUser: { id: string; fullName: string } | null;
   locations: Array<{ id: string; name: string }>;
 };
@@ -113,6 +115,11 @@ export function CustomersTable({
                   >
                     {customer.name}
                   </Link>
+                  {customer.isPublicEntity ? (
+                    <span className="ml-2 rounded border border-violet-500/40 bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-violet-200 uppercase">
+                      Kamu
+                    </span>
+                  ) : null}
                 </TableCell>
                 <TableCell className="font-mono text-blue-300">
                   {customer.vknTckn}
@@ -142,6 +149,8 @@ export function CustomersTable({
                           phone: customer.phone,
                           bizimHesapId: customer.bizimHesapId,
                           utsInstitutionNumber: customer.utsInstitutionNumber,
+                          isPublicEntity: Boolean(customer.isPublicEntity),
+                          spendingUnitVkn: customer.spendingUnitVkn ?? null,
                         }}
                       />
                     </div>
