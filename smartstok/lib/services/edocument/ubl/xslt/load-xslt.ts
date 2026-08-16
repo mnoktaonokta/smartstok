@@ -97,12 +97,31 @@ export function invoiceVisualXsltBase64(
   return toBase64(sanitizeInvoiceXslt(xml, logo, qr));
 }
 
-export function eirsaliyeXsltBase64(): string {
+export function eirsaliyeXsltBase64(
+  logo?: UblLogo | null,
+  qr?: UblLogo | null,
+): string {
   const dir = xsltDir();
-  if (dir) {
-    return toBase64(
-      readFileSync(join(dir, "eirsaliye-default.xslt"), "utf8"),
-    );
-  }
-  return toBase64(EIRSALIYE_DEFAULT_XSLT);
+  const raw = dir
+    ? readFileSync(join(dir, "eirsaliye-default.xslt"), "utf8")
+    : EIRSALIYE_DEFAULT_XSLT;
+  return toBase64(applyEirsaliyeBrand(raw, logo, qr));
+}
+
+function applyEirsaliyeBrand(
+  xsltXml: string,
+  logo?: UblLogo | null,
+  qr?: UblLogo | null,
+): string {
+  const logoImg =
+    logo?.base64 && logo.mimeType
+      ? `<img style="max-width:180px; max-height:90px;" alt="Firma Logo" src="data:${logo.mimeType};base64,${logo.base64}"/>`
+      : "";
+  const qrImg =
+    qr?.base64 && qr.mimeType
+      ? `<img style="width:112px; height:112px;" alt="Karekod" src="data:${qr.mimeType};base64,${qr.base64}"/>`
+      : "";
+  return xsltXml
+    .replace("__LOGO_IMG__", logoImg)
+    .replace("__QR_IMG__", qrImg);
 }

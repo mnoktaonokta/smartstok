@@ -123,10 +123,46 @@ export function gibInvoiceQrPng(input: UblInvoiceInput): {
   mimeType: "image/png";
   base64: string;
 } | null {
+  return qrPngFromText(buildGibInvoiceQrJson(input));
+}
+
+export type GibDespatchQrInput = {
+  supplierVkn: string;
+  customerVkn: string;
+  documentId: string;
+  uuid: string;
+  issueDate: string;
+  despatchDate?: string;
+  profileId?: string;
+  typeCode?: string;
+};
+
+export function buildGibDespatchQrJson(input: GibDespatchQrInput): string {
+  return JSON.stringify({
+    vkntckn: input.supplierVkn.replace(/\D/g, ""),
+    avkntckn: input.customerVkn.replace(/\D/g, ""),
+    senaryo: input.profileId || "TEMELIRSALIYE",
+    tip: input.typeCode || "SEVK",
+    tarih: input.issueDate,
+    no: input.documentId,
+    ettn: input.uuid,
+    sevktarihi: input.despatchDate || input.issueDate,
+  });
+}
+
+export function gibDespatchQrPng(input: GibDespatchQrInput): {
+  mimeType: "image/png";
+  base64: string;
+} | null {
+  return qrPngFromText(buildGibDespatchQrJson(input));
+}
+
+function qrPngFromText(text: string): {
+  mimeType: "image/png";
+  base64: string;
+} | null {
   try {
-    const qr = createQr(buildGibInvoiceQrJson(input), {
-      errorCorrectionLevel: "M",
-    });
+    const qr = createQr(text, { errorCorrectionLevel: "M" });
     return { mimeType: "image/png", base64: matrixToPngBase64(qr.modules) };
   } catch {
     return null;

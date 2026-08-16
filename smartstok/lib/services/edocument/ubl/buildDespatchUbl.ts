@@ -1,6 +1,8 @@
 import { randomUUID } from "crypto";
 import type { CompanySettings, Customer } from "@/app/generated/prisma/client";
-import { eirsaliyeXsltBase64 } from "./xslt/load-xslt";
+import { parseTrAddress } from "../parse-tr-address";
+import { gibDespatchQrPng } from "./gib-qr";
+import { eirsaliyeXsltBase64, ublLogoFromSettings } from "./xslt/load-xslt";
 
 export type DespatchLineInput = {
   productName: string;
@@ -17,13 +19,6 @@ function xmlEscape(value: string): string {
     .replace(/'/g, "&apos;");
 }
 
-/** Adresten 5 haneli PK çıkar; yoksa geçerli TR örnek PK (GİB 00000’ı reddeder). */
-function resolvePostalZone(address?: string | null): string {
-  const match = address?.match(/\b([0-8]\d{4})\b/);
-  if (match?.[1] && match[1] !== "00000") return match[1];
-  return "34000";
-}
-
 function postalAddressXml(opts: {
   street?: string | null;
   district?: string | null;
@@ -32,16 +27,23 @@ function postalAddressXml(opts: {
   indent?: string;
 }): string {
   const pad = opts.indent ?? "        ";
-  const street = (opts.street || ".").trim() || ".";
-  const district = (opts.district || "Merkez").trim() || "Merkez";
-  const city = (opts.city || "İstanbul").trim() || "İstanbul";
+  const parsed = parseTrAddress(opts.street, {
+    city: opts.city,
+    district: opts.district,
+  });
+  const street = parsed.street || (opts.street || "").trim() || ".";
+  const district = parsed.district;
+  const city = parsed.city;
   const postalZone =
-    (opts.postalZone || "").trim() || resolvePostalZone(opts.street);
+    (opts.postalZone || "").trim() || parsed.postalZone;
+  const postalXml = postalZone
+    ? `
+${pad}  <cbc:PostalZone>${xmlEscape(postalZone)}</cbc:PostalZone>`
+    : "";
   return `${pad}<cac:PostalAddress>
 ${pad}  <cbc:StreetName>${xmlEscape(street)}</cbc:StreetName>
 ${pad}  <cbc:CitySubdivisionName>${xmlEscape(district)}</cbc:CitySubdivisionName>
-${pad}  <cbc:CityName>${xmlEscape(city)}</cbc:CityName>
-${pad}  <cbc:PostalZone>${xmlEscape(postalZone)}</cbc:PostalZone>
+${pad}  <cbc:CityName>${xmlEscape(city)}</cbc:CityName>${postalXml}
 ${pad}  <cac:Country>
 ${pad}    <cbc:IdentificationCode>TR</cbc:IdentificationCode>
 ${pad}    <cbc:Name>Türkiye</cbc:Name>
@@ -55,16 +57,20 @@ function deliveryAddressXml(opts: {
   city?: string | null;
   postalZone?: string | null;
 }): string {
-  const street = (opts.street || ".").trim() || ".";
-  const district = (opts.district || "Merkez").trim() || "Merkez";
-  const city = (opts.city || "İstanbul").trim() || "İstanbul";
-  const postalZone =
-    (opts.postalZone || "").trim() || resolvePostalZone(opts.street);
+  const parsed = parseTrAddress(opts.street, {
+    city: opts.city,
+    district: opts.district,
+  });
+  const street = parsed.street || (opts.street || "").trim() || ".";
+  const postalZone = (opts.postalZone || "").trim() || parsed.postalZone;
+  const postalXml = postalZone
+    ? `
+        <cbc:PostalZone>${xmlEscape(postalZone)}</cbc:PostalZone>`
+    : "";
   return `      <cac:DeliveryAddress>
         <cbc:StreetName>${xmlEscape(street)}</cbc:StreetName>
-        <cbc:CitySubdivisionName>${xmlEscape(district)}</cbc:CitySubdivisionName>
-        <cbc:CityName>${xmlEscape(city)}</cbc:CityName>
-        <cbc:PostalZone>${xmlEscape(postalZone)}</cbc:PostalZone>
+        <cbc:CitySubdivisionName>${xmlEscape(parsed.district)}</cbc:CitySubdivisionName>
+        <cbc:CityName>${xmlEscape(parsed.city)}</cbc:CityName>${postalXml}
         <cac:Country>
           <cbc:IdentificationCode>TR</cbc:IdentificationCode>
           <cbc:Name>Türkiye</cbc:Name>
@@ -111,8 +117,16 @@ export function buildDespatchUbl(params: {
   const supplierVkn = (company.qnbVkn || company.vkn || "").trim();
   const companyName = company.companyName || "Firma";
   const totalQty = lines.reduce((s, l) => s + l.quantity, 0);
-  const customerPostalZone = resolvePostalZone(customer.address);
-  const companyPostalZone = resolvePostalZone(company.address);
+  const logo = ublLogoFromSettings(company);
+  const qr = gibDespatchQrPng({
+    supplierVkn,
+    customerVkn: customer.vknTckn,
+    documentId: despatchNumber,
+    uuid,
+    issueDate: dateStr,
+    despatchDate: dateStr,
+  });
+  const xsltB64 = eirsaliyeXsltBase64(logo, qr);
 
   const lineXml = lines
     .map((line, idx) => {
@@ -186,7 +200,7 @@ export function buildDespatchUbl(params: {
     <cbc:IssueDate>${dateStr}</cbc:IssueDate>
     <cbc:DocumentType>XSLT</cbc:DocumentType>
     <cac:Attachment>
-      <cbc:EmbeddedDocumentBinaryObject mimeCode="application/xml" encodingCode="Base64" characterSetCode="UTF-8" filename="eIrsaliye.xslt">${eirsaliyeXsltBase64()}</cbc:EmbeddedDocumentBinaryObject>
+      <cbc:EmbeddedDocumentBinaryObject mimeCode="application/xml" encodingCode="Base64" characterSetCode="UTF-8" filename="eIrsaliye.xslt">${xsltB64}</cbc:EmbeddedDocumentBinaryObject>
     </cac:Attachment>
   </cac:AdditionalDocumentReference>
   <cac:Signature>
@@ -198,7 +212,7 @@ export function buildDespatchUbl(params: {
       <cac:PartyName>
         <cbc:Name>${xmlEscape(companyName)}</cbc:Name>
       </cac:PartyName>
-${postalAddressXml({ street: company.address, postalZone: companyPostalZone })}
+${postalAddressXml({ street: company.address })}
     </cac:SignatoryParty>
     <cac:DigitalSignatureAttachment>
       <cac:ExternalReference>
@@ -212,7 +226,7 @@ ${postalAddressXml({ street: company.address, postalZone: companyPostalZone })}
       <cac:PartyName>
         <cbc:Name>${xmlEscape(companyName)}</cbc:Name>
       </cac:PartyName>
-${postalAddressXml({ street: company.address, postalZone: companyPostalZone })}
+${postalAddressXml({ street: company.address })}
       <cac:PartyTaxScheme>
         <cac:TaxScheme>
           <cbc:Name>${xmlEscape(company.taxOffice || ".")}</cbc:Name>
@@ -226,7 +240,7 @@ ${postalAddressXml({ street: company.address, postalZone: companyPostalZone })}
       <cac:PartyName>
         <cbc:Name>${xmlEscape(customer.name)}</cbc:Name>
       </cac:PartyName>
-${postalAddressXml({ street: customer.address, postalZone: customerPostalZone })}
+${postalAddressXml({ street: customer.address })}
       <cac:PartyTaxScheme>
         <cac:TaxScheme>
           <cbc:Name>${xmlEscape(customer.taxOffice || ".")}</cbc:Name>
@@ -241,7 +255,6 @@ ${postalAddressXml({ street: customer.address, postalZone: customerPostalZone })
     <cac:Delivery>
 ${deliveryAddressXml({
   street: customer.address,
-  postalZone: customerPostalZone,
 })}
       <cac:CarrierParty>
         ${partyIdentification(supplierVkn)}
@@ -250,7 +263,6 @@ ${deliveryAddressXml({
         </cac:PartyName>
 ${postalAddressXml({
   street: company.address,
-  postalZone: companyPostalZone,
   indent: "          ",
 })}
       </cac:CarrierParty>

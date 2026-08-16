@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { UblInvoiceInput, UblLine } from "../types";
+import { parseTrAddress } from "../parse-tr-address";
 import { escapeXml } from "../soap";
 import { amountInTurkishWords } from "./amount-in-words-tr";
 import { gibInvoiceQrPng } from "./gib-qr";
@@ -51,9 +52,14 @@ function partyXml(
   const scheme = schemeId(digits);
   const name = escapeXml(party.name);
   const taxOffice = escapeXml(party.taxOffice ?? "");
-  const street = escapeXml(party.address ?? "");
-  const city = escapeXml(party.city ?? "İstanbul");
-  const district = escapeXml(party.district ?? "");
+  const parsed = parseTrAddress(party.address, {
+    city: party.city,
+    district: party.district,
+  });
+  const street = escapeXml(parsed.street || party.address || ".");
+  const city = escapeXml(parsed.city);
+  const district = escapeXml(parsed.district);
+  const postalZone = escapeXml(parsed.postalZone);
   const country = escapeXml(party.country ?? "Türkiye");
   const phone = escapeXml(party.phone ?? "");
   const email = escapeXml(party.email ?? "");
@@ -80,6 +86,7 @@ function partyXml(
       <cbc:StreetName>${street}</cbc:StreetName>
       <cbc:CitySubdivisionName>${district}</cbc:CitySubdivisionName>
       <cbc:CityName>${city}</cbc:CityName>
+      ${postalZone ? `<cbc:PostalZone>${postalZone}</cbc:PostalZone>` : ""}
       <cac:Country>
         <cbc:IdentificationCode>TR</cbc:IdentificationCode>
         <cbc:Name>${country}</cbc:Name>

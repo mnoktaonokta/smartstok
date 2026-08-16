@@ -20,6 +20,8 @@ export type DespatchPrintInput = {
   customerAddress: string;
   lines: DespatchPrintLine[];
   note?: string | null;
+  logo?: { mimeType: string; base64: string } | null;
+  qrPngBase64?: string | null;
 };
 
 /** jsPDF WinAnsi uyumu + bozuk “harf arası boşluklu” metinleri toparla */
@@ -81,6 +83,43 @@ export function buildDespatchPrintPdf(input: DespatchPrintInput): Buffer {
 
   const dateStr = input.issueDate.toLocaleString("tr-TR");
   const totalQty = input.lines.reduce((s, l) => s + l.quantity, 0);
+
+  if (input.qrPngBase64) {
+    try {
+      doc.addImage(
+        `data:image/png;base64,${input.qrPngBase64}`,
+        "PNG",
+        174,
+        10,
+        22,
+        22,
+      );
+    } catch {
+      /* karekod gömülemezse belge yine basılır */
+    }
+  }
+  if (input.logo?.base64) {
+    const mime = input.logo.mimeType.toLowerCase();
+    const fmt = mime.includes("png")
+      ? "PNG"
+      : mime.includes("jpeg") || mime.includes("jpg")
+        ? "JPEG"
+        : null;
+    if (fmt) {
+      try {
+        doc.addImage(
+          `data:${input.logo.mimeType};base64,${input.logo.base64}`,
+          fmt,
+          118,
+          10,
+          48,
+          18,
+        );
+      } catch {
+        /* logo gömülemezse belge yine basılır */
+      }
+    }
+  }
 
   doc.setFontSize(16);
   doc.text("e-Irsaliye", 14, 16);

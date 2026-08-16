@@ -18,6 +18,7 @@
           table { width: 100%; border-collapse: collapse; }
           th, td { border: 1px solid #333; padding: 6px 8px; text-align: left; }
           th { background: #f2f2f2; }
+          .header td { border: none; vertical-align: top; }
           .meta td { border: none; padding: 2px 8px 2px 0; }
           .parties td { vertical-align: top; width: 50%; }
           .qty { text-align: right; }
@@ -25,12 +26,20 @@
         </style>
       </head>
       <body>
-        <h1>e-İrsaliye</h1>
-        <p class="muted">SEVK — TEMELİRSALİYE</p>
-        <table class="meta">
-          <tr><td><b>İrsaliye No</b></td><td><xsl:value-of select="$doc/cbc:ID"/></td></tr>
-          <tr><td><b>Tarih</b></td><td><xsl:value-of select="$doc/cbc:IssueDate"/> <xsl:value-of select="$doc/cbc:IssueTime"/></td></tr>
-          <tr><td><b>ETTN</b></td><td><xsl:value-of select="$doc/cbc:UUID"/></td></tr>
+        <table class="header">
+          <tr>
+            <td>
+              <h1>e-İrsaliye</h1>
+              <p class="muted">SEVK — TEMELİRSALİYE</p>
+              <table class="meta">
+                <tr><td><b>İrsaliye No</b></td><td><xsl:value-of select="$doc/cbc:ID"/></td></tr>
+                <tr><td><b>Tarih</b></td><td><xsl:value-of select="$doc/cbc:IssueDate"/> <xsl:value-of select="$doc/cbc:IssueTime"/></td></tr>
+                <tr><td><b>ETTN</b></td><td><xsl:value-of select="$doc/cbc:UUID"/></td></tr>
+              </table>
+            </td>
+            <td style="text-align:center; width:40%;">__LOGO_IMG__</td>
+            <td style="text-align:right; width:120px;">__QR_IMG__</td>
+          </tr>
         </table>
         <br/>
         <table class="parties">
@@ -39,13 +48,19 @@
               <b>Gönderici</b><br/>
               <xsl:value-of select="$doc/cac:DespatchSupplierParty/cac:Party/cac:PartyName/cbc:Name"/><br/>
               VKN/TCKN: <xsl:value-of select="$doc/cac:DespatchSupplierParty/cac:Party/cac:PartyIdentification/cbc:ID"/><br/>
-              <xsl:value-of select="$doc/cac:DespatchSupplierParty/cac:Party/cac:PostalAddress/cbc:StreetName"/>
+              <xsl:value-of select="$doc/cac:DespatchSupplierParty/cac:Party/cac:PostalAddress/cbc:StreetName"/><br/>
+              <xsl:value-of select="$doc/cac:DespatchSupplierParty/cac:Party/cac:PostalAddress/cbc:CitySubdivisionName"/>
+              <xsl:text> / </xsl:text>
+              <xsl:value-of select="$doc/cac:DespatchSupplierParty/cac:Party/cac:PostalAddress/cbc:CityName"/>
             </td>
             <td>
               <b>Alıcı</b><br/>
               <xsl:value-of select="$doc/cac:DeliveryCustomerParty/cac:Party/cac:PartyName/cbc:Name"/><br/>
               VKN/TCKN: <xsl:value-of select="$doc/cac:DeliveryCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID"/><br/>
-              <xsl:value-of select="$doc/cac:DeliveryCustomerParty/cac:Party/cac:PostalAddress/cbc:StreetName"/>
+              <xsl:value-of select="$doc/cac:DeliveryCustomerParty/cac:Party/cac:PostalAddress/cbc:StreetName"/><br/>
+              <xsl:value-of select="$doc/cac:DeliveryCustomerParty/cac:Party/cac:PostalAddress/cbc:CitySubdivisionName"/>
+              <xsl:text> / </xsl:text>
+              <xsl:value-of select="$doc/cac:DeliveryCustomerParty/cac:Party/cac:PostalAddress/cbc:CityName"/>
             </td>
           </tr>
         </table>
