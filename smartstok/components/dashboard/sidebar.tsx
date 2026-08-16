@@ -36,10 +36,10 @@ const navItems = [
   { href: "/dashboard/depots", label: "Depolar", icon: Warehouse },
   { href: "/dashboard/transfers", label: "Transfer Yapma", icon: ArrowLeftRight },
   { href: "/dashboard/fail-yonetimi", label: "Fail Yönetimi", icon: AlertTriangle },
-  { href: "/dashboard/malkabul", label: "Mal Kabul", icon: PackagePlus },
-  { href: "/dashboard/sayim", label: "Stok Sayımı", icon: ClipboardList },
   { href: "/dashboard/e-belge-fatura", label: "E-belge fatura", icon: Receipt },
   { href: "/dashboard/invoices", label: "Faturalar", icon: FileText },
+  { href: "/dashboard/malkabul", label: "Mal Kabul", icon: PackagePlus },
+  { href: "/dashboard/sayim", label: "Stok Sayımı", icon: ClipboardList },
   { href: "/dashboard/uts-tracking", label: "ÜTS", icon: Radio },
 ] as const;
 

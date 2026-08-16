@@ -28,10 +28,10 @@ export const NAV_PATH_ORDER = [
   "/dashboard/depots",
   "/dashboard/transfers",
   "/dashboard/fail-yonetimi",
-  "/dashboard/malkabul",
-  "/dashboard/sayim",
   "/dashboard/e-belge-fatura",
   "/dashboard/invoices",
+  "/dashboard/malkabul",
+  "/dashboard/sayim",
   "/dashboard/uts-tracking",
 ] as const;
 
