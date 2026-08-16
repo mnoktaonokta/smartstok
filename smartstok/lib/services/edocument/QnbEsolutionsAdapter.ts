@@ -7,6 +7,9 @@ import type {
   DownloadOutgoingResult,
   EArchiveSendResult,
   EInvoiceSendResult,
+  IncomingInvoice,
+  IncomingResponseResult,
+  ListIncomingResult,
   OutgoingStatusResult,
   QnbCredentials,
   TaxpayerQueryResult,
@@ -22,6 +25,7 @@ import {
   wsdlToEndpoint,
   xmlTagValue,
 } from "./soap";
+import { mapAppRespResult, mockIncomingInvoices } from "./incoming-invoice";
 
 const MINIMAL_PDF_B64 =
   "JVBERi0xLjAKJeLjz9MKMSAwIG9iaiA8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iaiA8PC9UeXBlL1BhZ2VzL0NvdW50IDEvS2lkc1szIDAgUl0+PgplbmRvYmoKMyAwIG9iaiA8PC9UeXBlL1BhZ2UvTWVkaWFCb3hbMCAwIDYxMiA3OTJdPj4KZW5kb2JqCnhyZWYKMCA0CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAxNSAwMDAwMCBuIAowMDAwMDAwMDc0IDAwMDAwIG4gCjAwMDAwMDAxMjEgMDAwMDAgbiAKdHJhaWxlcgo8PC9TaXplIDQvUm9vdCAxIDAgUj4+CnN0YXJ0eHJlZgoxOTMKJSVFT0Y=";
@@ -494,4 +498,243 @@ export class QnbEsolutionsAdapter implements IDocumentProvider {
       };
     }
   }
+
+  async listIncomingInvoices(input: {
+    from: string;
+    to: string;
+  }): Promise<ListIncomingResult> {
+    if (this.mockMode) {
+      return { ok: true, invoices: mockIncomingInvoices() };
+    }
+
+    const endpoint = wsdlToEndpoint(this.creds.connectorWsdl);
+    const vkn = escapeXml(this.creds.vkn);
+    const attempts: Array<{ action: string; body: string }> = [
+      {
+        action: "gelenBelgeleriListeleExt",
+        body: `<ser:gelenBelgeleriListeleExt>
+  <parametreler>
+    <vergiTcKimlikNo>${vkn}</vergiTcKimlikNo>
+    <belgeTuru>FATURA</belgeTuru>
+    <baslangicTarihi>${escapeXml(input.from)}</baslangicTarihi>
+    <bitisTarihi>${escapeXml(input.to)}</bitisTarihi>
+  </parametreler>
+</ser:gelenBelgeleriListeleExt>`,
+      },
+      {
+        action: "gelenBelgeleriListele",
+        body: `<ser:gelenBelgeleriListele>
+  <vergiTcKimlikNo>${vkn}</vergiTcKimlikNo>
+  <belgeTuru>FATURA</belgeTuru>
+  <baslangicTarihi>${escapeXml(input.from)}</baslangicTarihi>
+  <bitisTarihi>${escapeXml(input.to)}</bitisTarihi>
+</ser:gelenBelgeleriListele>`,
+      },
+    ];
+
+    let lastError = "Gelen fatura listesi alınamadı.";
+    try {
+      for (const attempt of attempts) {
+        const envelope = buildSoapEnvelope({
+          username: this.creds.username,
+          password: this.creds.password,
+          bodyXml: attempt.body,
+        });
+        const res = await postSoap({
+          endpoint,
+          soapAction: attempt.action,
+          envelope,
+        });
+        const fault =
+          extractSoapFault(res.body) || xmlTagValue(res.body, "faultstring");
+        if (fault) {
+          lastError = fault;
+          if (!/bulunamad|yok|not found|tanımsız|undefined/i.test(fault)) {
+            continue;
+          }
+          continue;
+        }
+        if (!res.ok) {
+          lastError = `QNB gelen liste HTTP ${res.status}`;
+          continue;
+        }
+        return { ok: true, invoices: parseQnbIncomingDocuments(res.body) };
+      }
+      return { ok: false, error: lastError };
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : "Gelen fatura listesi alınamadı.",
+      };
+    }
+  }
+
+  async downloadIncoming(uuid: string): Promise<DownloadOutgoingResult> {
+    if (this.mockMode) {
+      return { ok: true, pdfBase64: MINIMAL_PDF_B64, faturaURL: null };
+    }
+    const endpoint = wsdlToEndpoint(this.creds.connectorWsdl);
+    const vkn = escapeXml(this.creds.vkn);
+    const ettn = escapeXml(uuid);
+    const attempts: Array<{ action: string; body: string }> = [
+      {
+        action: "gelenBelgeIndir",
+        body: `<ser:gelenBelgeIndir>
+  <vkn>${vkn}</vkn>
+  <ettn>${ettn}</ettn>
+  <belgeFormati>PDF</belgeFormati>
+</ser:gelenBelgeIndir>`,
+      },
+      {
+        action: "gidenBelgeIndir",
+        body: `<ser:gidenBelgeIndir>
+  <vkn>${vkn}</vkn>
+  <belgeOid>${ettn}</belgeOid>
+  <belgeFormati>PDF</belgeFormati>
+</ser:gidenBelgeIndir>`,
+      },
+    ];
+    let lastError = "PDF alınamadı.";
+    try {
+      for (const attempt of attempts) {
+        const envelope = buildSoapEnvelope({
+          username: this.creds.username,
+          password: this.creds.password,
+          bodyXml: attempt.body,
+        });
+        const res = await postSoap({
+          endpoint,
+          soapAction: attempt.action,
+          envelope,
+        });
+        if (!res.ok) {
+          lastError = `QNB PDF HTTP ${res.status}`;
+          continue;
+        }
+        const fault =
+          extractSoapFault(res.body) || xmlTagValue(res.body, "faultstring");
+        if (fault) {
+          lastError = fault;
+          continue;
+        }
+        const pdfBase64 =
+          xmlTagValue(res.body, "return") ??
+          xmlTagValue(res.body, "belgeIcerigi") ??
+          xmlTagValue(res.body, "pdf");
+        if (!pdfBase64) {
+          lastError = "PDF verisi dönmedi.";
+          continue;
+        }
+        return { ok: true, pdfBase64, faturaURL: null, raw: res.body };
+      }
+      return { ok: false, error: lastError };
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : "PDF indirme hatası",
+      };
+    }
+  }
+
+  async sendIncomingResponse(input: {
+    uuid: string;
+    decision: "KABUL" | "RED";
+    description: string;
+    alias?: string | null;
+  }): Promise<IncomingResponseResult> {
+    if (this.mockMode) return { ok: true };
+
+    const endpoint = wsdlToEndpoint(this.creds.connectorWsdl);
+    const ettn = escapeXml(input.uuid.trim());
+    const aciklama = escapeXml(input.description.trim() || input.decision);
+    const body = `<ser:uygulamaYanitiGonder>
+  <ettn>${ettn}</ettn>
+  <durum>${input.decision}</durum>
+  <yanit>${input.decision}</yanit>
+  <aciklama>${aciklama}</aciklama>
+</ser:uygulamaYanitiGonder>`;
+
+    try {
+      const envelope = buildSoapEnvelope({
+        username: this.creds.username,
+        password: this.creds.password,
+        bodyXml: body,
+      });
+      const res = await postSoap({
+        endpoint,
+        soapAction: "uygulamaYanitiGonder",
+        envelope,
+      });
+      if (!res.ok) {
+        return { ok: false, error: `QNB uygulama yanıtı HTTP ${res.status}`, raw: res.body };
+      }
+      const fault =
+        extractSoapFault(res.body) || xmlTagValue(res.body, "faultstring");
+      if (fault) return { ok: false, error: fault, raw: res.body };
+      return { ok: true, raw: res.body };
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : "Uygulama yanıtı gönderilemedi.",
+      };
+    }
+  }
+}
+
+function parseQnbIncomingDocuments(xml: string): IncomingInvoice[] {
+  const blocks =
+    xml.match(
+      /<(?:[\w-]+:)?(?:belge|fatura|gelenBelge)\b[\s\S]*?<\/(?:[\w-]+:)?(?:belge|fatura|gelenBelge)>/gi,
+    ) ?? [];
+  const invoices: IncomingInvoice[] = [];
+  const seen = new Set<string>();
+  const source = blocks.length ? blocks : [xml];
+
+  for (const block of source) {
+    const uuid =
+      xmlTagValue(block, "ettn") ??
+      xmlTagValue(block, "uuid") ??
+      xmlTagValue(block, "belgeOid") ??
+      "";
+    if (!uuid || seen.has(uuid)) continue;
+    seen.add(uuid);
+    invoices.push({
+      uuid,
+      invoiceNo:
+        xmlTagValue(block, "belgeNo") ??
+        xmlTagValue(block, "faturaNo") ??
+        xmlTagValue(block, "invoiceId"),
+      issueDate: (xmlTagValue(block, "belgeTarihi") ??
+        xmlTagValue(block, "faturaTarihi") ??
+        xmlTagValue(block, "issueDate") ??
+        "").slice(0, 10) || null,
+      receivedAt: (xmlTagValue(block, "alimTarihi") ??
+        xmlTagValue(block, "gelisTarihi") ??
+        "").slice(0, 10) || null,
+      supplierName:
+        xmlTagValue(block, "gonderenUnvan") ??
+        xmlTagValue(block, "unvan") ??
+        xmlTagValue(block, "supplierName"),
+      supplierVkn:
+        xmlTagValue(block, "gonderenVkn") ??
+        xmlTagValue(block, "vergiTcKimlikNo") ??
+        xmlTagValue(block, "vkn"),
+      payableAmount:
+        xmlTagValue(block, "odenecekTutar") ??
+        xmlTagValue(block, "tutar") ??
+        xmlTagValue(block, "payableAmount"),
+      currency: xmlTagValue(block, "paraBirimi") ?? "TRY",
+      profileId:
+        xmlTagValue(block, "senaryo") ??
+        xmlTagValue(block, "profileId") ??
+        xmlTagValue(block, "faturaSenaryo"),
+      appStatus: mapAppRespResult(
+        xmlTagValue(block, "yanitDurumu") ??
+          xmlTagValue(block, "uygulamaYaniti") ??
+          xmlTagValue(block, "durum"),
+      ),
+      gbAlias: xmlTagValue(block, "gonderenEtiket") ?? xmlTagValue(block, "alias"),
+    });
+  }
+  return invoices;
 }

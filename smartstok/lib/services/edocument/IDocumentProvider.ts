@@ -5,6 +5,8 @@ import type {
   EArchiveSendResult,
   EDocumentRefOptions,
   EInvoiceSendResult,
+  IncomingResponseResult,
+  ListIncomingResult,
   OutgoingStatusResult,
   TaxpayerQueryResult,
 } from "./types";
@@ -46,4 +48,15 @@ export interface IDocumentProvider {
     faturaNo?: string | null;
     vknTckn?: string | null;
   }): Promise<CancelEArchiveResult>;
+  listIncomingInvoices(input: {
+    from: string;
+    to: string;
+  }): Promise<ListIncomingResult>;
+  downloadIncoming(uuid: string): Promise<DownloadOutgoingResult>;
+  sendIncomingResponse(input: {
+    uuid: string;
+    decision: "KABUL" | "RED";
+    description: string;
+    alias?: string | null;
+  }): Promise<IncomingResponseResult>;
 }

@@ -9,9 +9,13 @@ import type {
   EDocumentRefOptions,
   EInvoiceSendResult,
   ElogoCredentials,
+  IncomingInvoice,
+  IncomingResponseResult,
+  ListIncomingResult,
   OutgoingStatusResult,
   TaxpayerQueryResult,
 } from "./types";
+import { mapAppRespResult, mockIncomingInvoices } from "./incoming-invoice";
 import {
   escapeXml,
   extractSoapFault,
@@ -892,4 +896,237 @@ export class ELogoDocumentAdapter implements IDocumentProvider {
       };
     }
   }
+
+  async listIncomingInvoices(input: {
+    from: string;
+    to: string;
+  }): Promise<ListIncomingResult> {
+    if (this.mockMode) {
+      return { ok: true, invoices: mockIncomingInvoices() };
+    }
+
+    try {
+      return await this.withSession(async (sessionID) => {
+        const listed = await this.fetchIncomingList(sessionID, input);
+        if (!listed.ok) return listed;
+        return { ok: true, invoices: listed.invoices };
+      });
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : "Gelen fatura listesi alınamadı.",
+      };
+    }
+  }
+
+  private async fetchIncomingList(
+    sessionID: string,
+    input: { from: string; to: string },
+  ): Promise<ListIncomingResult> {
+    const attempts = [
+      [
+        "DOCUMENTTYPE=EINVOICEDETAIL",
+        "OPTYPE=2",
+        `BEGINDATE=${input.from}`,
+        `ENDDATE=${input.to}`,
+        "DATEBY=1",
+      ],
+      [
+        "DOCUMENTTYPE=EINVOICE",
+        "OPTYPE=2",
+        `BEGINDATE=${input.from}`,
+        `ENDDATE=${input.to}`,
+        "DATEBY=1",
+      ],
+    ];
+
+    let lastError = "Gelen fatura bulunamadı.";
+    for (const params of attempts) {
+      const body = `<tem:GetDocumentList>
+      <tem:sessionID>${escapeXml(sessionID)}</tem:sessionID>
+      ${paramListXml(params)}
+    </tem:GetDocumentList>`;
+
+      const res = await postElogoSoap({
+        endpoint: this.creds.endpoint,
+        soapAction: this.soapAction("GetDocumentList"),
+        envelope: buildElogoEnvelope(body),
+      });
+
+      const fault = extractSoapFault(res.body);
+      if (fault) {
+        lastError = fault;
+        continue;
+      }
+      if (!res.ok) {
+        lastError = `GetDocumentList — ${summarizeHttpError(res.status, res.body)}`;
+        continue;
+      }
+
+      const code = resultCode(res.body);
+      // 0 = belge yok (boş liste), 1 = başarılı
+      if (code && code !== "1" && code !== "0") {
+        lastError = resultMsg(res.body) || `Liste resultCode=${code}`;
+        continue;
+      }
+
+      return { ok: true, invoices: parseElogoIncomingDocuments(res.body) };
+    }
+
+    return { ok: false, error: lastError };
+  }
+
+  async downloadIncoming(uuid: string): Promise<DownloadOutgoingResult> {
+    return this.downloadOutgoing(uuid, {
+      documentType: "EINVOICE",
+      uuid,
+    });
+  }
+
+  async sendIncomingResponse(input: {
+    uuid: string;
+    decision: "KABUL" | "RED";
+    description: string;
+    alias?: string | null;
+  }): Promise<IncomingResponseResult> {
+    if (this.mockMode) return { ok: true };
+
+    const uuid = input.uuid.trim();
+    if (!uuid) return { ok: false, error: "Yanıt için fatura UUID gerekli." };
+    const description = input.description.trim() || input.decision;
+
+    const packed = ublToElogoZip(uuid, "<ApplicationResponse/>");
+    const today = new Date().toISOString().slice(0, 10);
+    const params = [
+      "DOCUMENTTYPE=CREATEAPPLICATIONRESPONSE",
+      `UUID=${uuid}`,
+      `APPLICATIONRESPONSE=${input.decision}`,
+      `DESCRIPTION=${description}`,
+    ];
+    if (input.alias?.trim()) {
+      params.push(`ALIAS=${input.alias.trim()}`);
+    }
+
+    try {
+      return await this.withSession(async (sessionID) => {
+        const body = `<tem:SendDocument>
+      <tem:sessionID>${escapeXml(sessionID)}</tem:sessionID>
+      ${paramListXml(params)}
+      <tem:document>
+        <efat:binaryData>
+          <efat:Value>${packed.base64}</efat:Value>
+          <efat:contentType>base64</efat:contentType>
+        </efat:binaryData>
+        <efat:currentDate>${today}</efat:currentDate>
+        <efat:fileName>${escapeXml(packed.fileName)}</efat:fileName>
+        <efat:hash>${packed.hash}</efat:hash>
+      </tem:document>
+    </tem:SendDocument>`;
+
+        const res = await postElogoSoap({
+          endpoint: this.creds.endpoint,
+          soapAction: this.soapAction("SendDocument"),
+          envelope: buildElogoEnvelope(body),
+        });
+
+        const fault = extractSoapFault(res.body);
+        if (fault) return { ok: false, error: fault, raw: res.body };
+        if (!res.ok) {
+          return {
+            ok: false,
+            error: `Uygulama yanıtı — ${summarizeHttpError(res.status, res.body)}`,
+            raw: res.body,
+          };
+        }
+
+        const code = resultCode(res.body);
+        if (code && code !== "1") {
+          return {
+            ok: false,
+            error: resultMsg(res.body) || `Yanıt resultCode=${code}`,
+            raw: res.body,
+          };
+        }
+
+        return { ok: true, raw: res.body };
+      });
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : "Uygulama yanıtı gönderilemedi.",
+      };
+    }
+  }
+}
+
+function parseElogoIncomingDocuments(xml: string): IncomingInvoice[] {
+  const blocks =
+    xml.match(/<(?:[\w-]+:)?Document\b[\s\S]*?<\/(?:[\w-]+:)?Document>/gi) ??
+    [];
+  const invoices: IncomingInvoice[] = [];
+  const seen = new Set<string>();
+
+  for (const block of blocks) {
+    const info = parseElogoDocInfo(block);
+    const uuid =
+      info.UUID ||
+      firstTagAnywhere(block, "documentUuid") ||
+      firstTagAnywhere(block, "DocumentUuid") ||
+      "";
+    if (!uuid || /nil/i.test(uuid) || seen.has(uuid)) continue;
+    seen.add(uuid);
+
+    const profileId = info.PROFILEID || info.INVOICETYPE || null;
+    const appRaw =
+      info.APPRESPRESULT || info.RESPCODE || info.APPRESPONSE || info.APPRESP;
+    invoices.push({
+      uuid,
+      invoiceNo:
+        info.ELEMENTID ||
+        info.DOCUMENTID ||
+        firstTagAnywhere(block, "documentId"),
+      issueDate: toIsoDay(info.ISSUEDATE || info.CURRENTDATE),
+      receivedAt: toIsoDay(info.CURRENTDATE || info.ISSUEDATE),
+      supplierName:
+        info.SUPPLIERPARTYNAME || info.SENDERTITLE || info.SUPPLIERNAME || null,
+      supplierVkn:
+        info.SUPPLIERVKNTCKN || info.SENDERVKNTCKN || info.VKNTCKN || null,
+      payableAmount:
+        info.PAYABLEAMOUNT || info.INVOICETOTAL || info.TAXINCLUSIVEAMOUNT || null,
+      currency: info.CURRENCYUNIT || info.CURRENCY || "TRY",
+      profileId,
+      appStatus: mapAppRespResult(appRaw),
+      gbAlias: info.GBALIAS || info.ALIAS || null,
+    });
+  }
+  return invoices;
+}
+
+function parseElogoDocInfo(block: string): Record<string, string> {
+  const info: Record<string, string> = {};
+  const re =
+    /<(?:[\w-]+:)?string>([\s\S]*?)<\/(?:[\w-]+:)?string>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(block))) {
+    const raw = m[1]
+      .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .trim();
+    const eq = raw.indexOf("=");
+    if (eq <= 0) continue;
+    info[raw.slice(0, eq).trim().toUpperCase()] = raw.slice(eq + 1).trim();
+  }
+  const uuidTag = firstTagAnywhere(block, "documentUuid");
+  if (uuidTag && !/nil/i.test(uuidTag)) info.UUID = uuidTag;
+  const idTag = firstTagAnywhere(block, "documentId");
+  if (idTag) info.DOCUMENTID = idTag;
+  return info;
+}
+
+function toIsoDay(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const m = value.match(/(\d{4}-\d{2}-\d{2})/);
+  return m?.[1] ?? null;
 }

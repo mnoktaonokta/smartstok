@@ -55,6 +55,35 @@ export type CancelEArchiveResult =
   | { ok: true; raw?: unknown }
   | { ok: false; error: string; raw?: unknown };
 
+export type IncomingAppStatus =
+  | "NONE"
+  | "ACCEPTED"
+  | "REJECTED"
+  | "AUTO_ACCEPTED"
+  | "NOT_APPLICABLE";
+
+export type IncomingInvoice = {
+  uuid: string;
+  invoiceNo: string | null;
+  issueDate: string | null;
+  receivedAt: string | null;
+  supplierName: string | null;
+  supplierVkn: string | null;
+  payableAmount: string | null;
+  currency: string | null;
+  profileId: string | null;
+  appStatus: IncomingAppStatus;
+  gbAlias: string | null;
+};
+
+export type ListIncomingResult =
+  | { ok: true; invoices: IncomingInvoice[] }
+  | { ok: false; error: string };
+
+export type IncomingResponseResult =
+  | { ok: true; raw?: unknown }
+  | { ok: false; error: string; raw?: unknown };
+
 export type QnbCredentials = {
   username: string;
   password: string;

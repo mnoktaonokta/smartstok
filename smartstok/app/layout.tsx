@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Sora, JetBrains_Mono } from "next/font/google";
+import { auth } from "@/auth";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import "./globals.css";
@@ -28,6 +29,7 @@ export default async function RootLayout({
   const cookieStore = await cookies();
   const raw = cookieStore.get("smartstok-theme")?.value;
   const theme = raw === "light" || raw === "dark" ? raw : "dark";
+  const session = await auth();
 
   return (
     <html
@@ -38,7 +40,7 @@ export default async function RootLayout({
     >
       <body className="flex min-h-full flex-col bg-background text-foreground antialiased">
         <ThemeProvider initialTheme={theme}>
-          <AuthSessionProvider>{children}</AuthSessionProvider>
+          <AuthSessionProvider session={session}>{children}</AuthSessionProvider>
         </ThemeProvider>
       </body>
     </html>

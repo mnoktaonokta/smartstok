@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Inbox } from "lucide-react";
 import { auth } from "@/auth";
 import { listInvoicesAction } from "@/lib/actions/invoices";
 import { canMutateData } from "@/lib/roles";
@@ -23,23 +23,23 @@ export default async function InvoicesPage() {
             arşivi.
           </p>
         </div>
-        {canMutate ? (
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/dashboard/e-belge-fatura"
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-blue-600 px-5 text-sm font-medium text-white shadow-[0_0_20px_rgba(37,99,235,0.35)] transition-colors hover:bg-blue-500"
-            >
-              <Plus className="size-4" />
-              E-belge fatura
-            </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/dashboard/invoices/gelen"
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-blue-600 px-5 text-sm font-medium text-white shadow-[0_0_20px_rgba(37,99,235,0.35)] transition-colors hover:bg-blue-500"
+          >
+            <Inbox className="size-4" />
+            Gelen e-Belgeler
+          </Link>
+          {canMutate ? (
             <Link
               href="/dashboard/invoices/new"
               className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-zinc-700 px-5 text-sm font-medium text-zinc-200 transition-colors hover:bg-zinc-900"
             >
               Bizim Hesap
             </Link>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
 
       <InvoicesTable invoices={invoices} />
