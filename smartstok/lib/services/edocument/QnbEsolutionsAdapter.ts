@@ -2,6 +2,7 @@ import "server-only";
 
 import type { IDocumentProvider } from "./IDocumentProvider";
 import type {
+  CancelEArchiveResult,
   DespatchSendResult,
   DownloadOutgoingResult,
   EArchiveSendResult,
@@ -429,6 +430,67 @@ export class QnbEsolutionsAdapter implements IDocumentProvider {
       return {
         ok: false,
         error: e instanceof Error ? e.message : "İndirme hatası",
+      };
+    }
+  }
+
+  async cancelEArchive(input: {
+    uuid: string;
+    faturaNo?: string | null;
+    vknTckn?: string | null;
+  }): Promise<CancelEArchiveResult> {
+    if (this.mockMode) {
+      return { ok: true };
+    }
+
+    const uuid = input.uuid.trim();
+    if (!uuid) return { ok: false, error: "İptal için UUID gerekli." };
+
+    try {
+      const ettn = escapeXml(uuid);
+      const faturaNo = (input.faturaNo ?? "").trim();
+      const body = `<ser:faturaIptal>
+  <ettn>${ettn}</ettn>
+  <faturaUuid>${ettn}</faturaUuid>
+  ${faturaNo ? `<faturaNo>${escapeXml(faturaNo)}</faturaNo>` : ""}
+</ser:faturaIptal>`;
+      const envelope = buildSoapEnvelope({
+        username: this.creds.username,
+        password: this.creds.password,
+        bodyXml: body,
+      });
+      const endpoint = wsdlToEndpoint(this.creds.earchiveWsdl);
+      const res = await postSoap({
+        endpoint,
+        soapAction: "faturaIptal",
+        envelope,
+      });
+      if (!res.ok) {
+        return {
+          ok: false,
+          error: `QNB e-Arşiv iptal HTTP ${res.status}`,
+          raw: res.body,
+        };
+      }
+      const fault = extractSoapFault(res.body) || xmlTagValue(res.body, "faultstring");
+      if (fault) return { ok: false, error: fault, raw: res.body };
+
+      const resultCode =
+        xmlTagValue(res.body, "resultCode") ??
+        xmlTagValue(res.body, "sonucKodu");
+      if (resultCode && resultCode !== "0" && resultCode !== "00") {
+        const msg =
+          xmlTagValue(res.body, "resultMsg") ??
+          xmlTagValue(res.body, "sonucMesaji") ??
+          "e-Arşiv iptal reddedildi.";
+        return { ok: false, error: msg, raw: res.body };
+      }
+
+      return { ok: true, raw: res.body };
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : "e-Arşiv iptal hatası",
       };
     }
   }

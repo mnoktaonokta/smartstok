@@ -23,6 +23,7 @@ import {
 } from "@/lib/services/edocument/kamu-invoice";
 import type { UblParty } from "@/lib/services/edocument/types";
 import { getOrCreateCompanySettings } from "@/lib/services/erp/company-settings";
+import { eArchiveCancelEligibility } from "@/lib/services/edocument/e-archive-cancel";
 
 const TAX_RATE = 10;
 
@@ -552,6 +553,13 @@ export async function getEDocumentInvoiceDetailAction(invoiceId: string) {
       hasExternalPdf: hasPdfStored,
       hasDespatchPdf,
       itemCount: invoice.items.length,
+      cancelEligibility: eArchiveCancelEligibility({
+        documentType: invoice.documentType,
+        docStatus: invoice.docStatus,
+        uuid: invoice.uuid,
+        createdAt: invoice.createdAt,
+        bizimHesapGuid: invoice.bizimHesapGuid,
+      }),
     },
   };
 }
@@ -1033,6 +1041,73 @@ export async function finalizeEDocumentInvoiceAction(
         error instanceof Error
           ? error.message
           : "Fatura kesilirken hata oluştu.",
+    };
+  }
+}
+
+/** Kesilmiş e-Arşiv faturayı iptal et (e-Fatura’da çalışmaz). */
+export async function cancelEArchiveInvoiceAction(
+  invoiceId: string,
+): Promise<{ error?: string; success?: boolean }> {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) return { error: "Oturum bulunamadı." };
+    assertCanMutate(session.user.roles);
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        customer: { select: { vknTckn: true } },
+        items: { select: { stockItemId: true } },
+      },
+    });
+    if (!invoice) return { error: "Fatura bulunamadı." };
+
+    const eligibility = eArchiveCancelEligibility(invoice);
+    if (!eligibility.canCancel) {
+      return { error: eligibility.reason };
+    }
+
+    const factory = await EDocumentFactory.getInstance();
+    if (!factory.ok) return { error: factory.error };
+
+    const faturaNo = invoice.invoiceNo?.trim() || invoice.faturaNo?.trim() || null;
+    const cancelled = await factory.provider.cancelEArchive({
+      uuid: invoice.uuid!,
+      faturaNo,
+      vknTckn: invoice.customer?.vknTckn,
+    });
+    if (!cancelled.ok) {
+      return { error: `e-Arşiv iptal: ${cancelled.error}` };
+    }
+
+    const stockIds = invoice.items.map((i) => i.stockItemId);
+    await prisma.$transaction(async (tx) => {
+      await tx.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          docStatus: "CANCELLED",
+          lastError: null,
+        },
+      });
+      if (stockIds.length > 0) {
+        await tx.stockItem.updateMany({
+          where: { id: { in: stockIds } },
+          data: { isAvailable: true, utsStatus: "PENDING" },
+        });
+      }
+    });
+
+    revalidateInvoicePaths(invoice.locationId);
+    revalidatePath(`/dashboard/invoices/${invoice.id}`);
+    return { success: true };
+  } catch (error) {
+    console.error("[cancelEArchiveInvoiceAction]", error);
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Fatura iptal edilirken hata oluştu.",
     };
   }
 }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { Loader2, Pencil } from "lucide-react";
 import {
+  cancelEArchiveInvoiceAction,
   finalizeEDocumentInvoiceAction,
   issueDespatchAction,
 } from "@/lib/actions/edocument-invoices";
@@ -66,6 +67,7 @@ export type InvoiceDetailView = {
   hasExternalPdf: boolean;
   hasDespatchPdf: boolean;
   itemCount: number;
+  cancelEligibility: { canCancel: boolean; reason: string };
 };
 
 function statusHeadline(inv: InvoiceDetailView) {
@@ -84,6 +86,8 @@ function statusHeadline(inv: InvoiceDetailView) {
       return "e-Fatura işleniyor";
     case "FAILED":
       return "Hata";
+    case "CANCELLED":
+      return "İptal edildi";
     default:
       return inv.docStatus;
   }
@@ -174,6 +178,26 @@ export function InvoiceDetailActions({
     });
   }
 
+  function runCancel() {
+    if (!invoice.cancelEligibility.canCancel) return;
+    if (
+      !window.confirm(
+        "Bu e-Arşiv fatura entegratörde iptal edilecek ve stok tekrar müsait işaretlenecek. Devam?",
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const r = await cancelEArchiveInvoiceAction(invoice.id);
+      if (r.error) {
+        setError(r.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -207,6 +231,20 @@ export function InvoiceDetailActions({
               Düzenle
             </Link>
           ) : null}
+          {canMutate &&
+          invoice.documentType === "EARCHIVE" &&
+          invoice.docStatus !== "DRAFT" ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isPending || !invoice.cancelEligibility.canCancel}
+              title={invoice.cancelEligibility.reason}
+              onClick={runCancel}
+            >
+              {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+              İptal
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -218,6 +256,21 @@ export function InvoiceDetailActions({
       {error ? (
         <p className="text-sm text-red-300" role="alert">
           {error}
+        </p>
+      ) : null}
+      {canMutate &&
+      (invoice.documentType === "EARCHIVE" ||
+        invoice.documentType === "EINVOICE") &&
+      invoice.docStatus !== "DRAFT" &&
+      invoice.docStatus !== "CANCELLED" ? (
+        <p
+          className={
+            invoice.cancelEligibility.canCancel
+              ? "text-xs text-emerald-300/90"
+              : "text-xs text-zinc-500"
+          }
+        >
+          {invoice.cancelEligibility.reason}
         </p>
       ) : null}
 

@@ -51,6 +51,10 @@ export type DownloadOutgoingResult =
     }
   | { ok: false; error: string };
 
+export type CancelEArchiveResult =
+  | { ok: true; raw?: unknown }
+  | { ok: false; error: string; raw?: unknown };
+
 export type QnbCredentials = {
   username: string;
   password: string;

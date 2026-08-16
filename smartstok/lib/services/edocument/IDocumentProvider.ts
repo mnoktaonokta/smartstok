@@ -1,4 +1,5 @@
 import type {
+  CancelEArchiveResult,
   DespatchSendResult,
   DownloadOutgoingResult,
   EArchiveSendResult,
@@ -39,4 +40,10 @@ export interface IDocumentProvider {
     belgeOid: string,
     options?: EDocumentRefOptions,
   ): Promise<DownloadOutgoingResult>;
+  /** Yalnızca e-Arşiv. e-Fatura için çağrılmaz. */
+  cancelEArchive(input: {
+    uuid: string;
+    faturaNo?: string | null;
+    vknTckn?: string | null;
+  }): Promise<CancelEArchiveResult>;
 }

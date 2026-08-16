@@ -82,6 +82,8 @@ enum InvoiceDocStatus {
   PROCESSING
   COMPLETED
   FAILED
+  /** e-Arşiv iptal edildi */
+  CANCELLED
 }
 
 model User {

@@ -2,6 +2,7 @@ import "server-only";
 
 import type { IDocumentProvider } from "./IDocumentProvider";
 import type {
+  CancelEArchiveResult,
   DespatchSendResult,
   DownloadOutgoingResult,
   EArchiveSendResult,
@@ -788,6 +789,106 @@ export class ELogoDocumentAdapter implements IDocumentProvider {
       return {
         ok: false,
         error: e instanceof Error ? e.message : "PDF indirme hatası",
+      };
+    }
+  }
+
+  async cancelEArchive(input: {
+    uuid: string;
+    faturaNo?: string | null;
+    vknTckn?: string | null;
+  }): Promise<CancelEArchiveResult> {
+    if (this.mockMode) {
+      return { ok: true };
+    }
+
+    const uuid = input.uuid.trim();
+    const elementId = (input.faturaNo ?? "").trim();
+    if (!uuid && !elementId) {
+      return { ok: false, error: "İptal için ETTN veya fatura numarası gerekli." };
+    }
+
+    const packed = ublToElogoZip(uuid || elementId, "<Cancel/>");
+    const today = new Date().toISOString().slice(0, 10);
+
+    const attempts: string[][] = [];
+    if (uuid) {
+      attempts.push(["DOCUMENTTYPE=CANCELEARCHIVEINVOICE", `UUID=${uuid}`]);
+      attempts.push([
+        "DOCUMENTTYPE=CANCELEARCHIVETYPE2",
+        `UUID=${uuid}`,
+        "DESCRIPTION=Yanlis kesim iptali",
+      ]);
+    }
+    if (elementId) {
+      attempts.push([
+        "DOCUMENTTYPE=CANCELEARCHIVEINVOICE",
+        `ELEMENTID=${elementId}`,
+      ]);
+      if (uuid) {
+        attempts.push([
+          "DOCUMENTTYPE=CANCELEARCHIVEINVOICE",
+          `UUID=${uuid}`,
+          `ELEMENTID=${elementId}`,
+        ]);
+      }
+    }
+
+    try {
+      return await this.withSession(async (sessionID) => {
+        let lastError = "Aradığınız kriterlere göre fatura bulunamadı.";
+        for (const params of attempts) {
+          const body = `<tem:SendDocument>
+      <tem:sessionID>${escapeXml(sessionID)}</tem:sessionID>
+      ${paramListXml(params)}
+      <tem:document>
+        <efat:binaryData>
+          <efat:Value>${packed.base64}</efat:Value>
+          <efat:contentType>base64</efat:contentType>
+        </efat:binaryData>
+        <efat:currentDate>${today}</efat:currentDate>
+        <efat:fileName>${escapeXml(packed.fileName)}</efat:fileName>
+        <efat:hash>${packed.hash}</efat:hash>
+      </tem:document>
+    </tem:SendDocument>`;
+
+          const res = await postElogoSoap({
+            endpoint: this.creds.endpoint,
+            soapAction: this.soapAction("SendDocument"),
+            envelope: buildElogoEnvelope(body),
+          });
+
+          const fault = extractSoapFault(res.body);
+          if (fault) {
+            lastError = fault;
+            if (!/bulunamadı|bulunamadi|kriter/i.test(fault)) {
+              return { ok: false, error: fault, raw: res.body };
+            }
+            continue;
+          }
+          if (!res.ok) {
+            lastError = `e-Logo iptal — ${summarizeHttpError(res.status, res.body)}`;
+            continue;
+          }
+
+          const code = resultCode(res.body);
+          if (code && code !== "1") {
+            lastError = resultMsg(res.body) || `İptal resultCode=${code}`;
+            if (!/bulunamadı|bulunamadi|kriter/i.test(lastError)) {
+              return { ok: false, error: lastError, raw: res.body };
+            }
+            continue;
+          }
+
+          return { ok: true, raw: res.body };
+        }
+
+        return { ok: false, error: lastError };
+      });
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : "e-Arşiv iptal hatası",
       };
     }
   }
