@@ -77,9 +77,9 @@ export function CustomersTable({
           <TableRow>
             <TableHead>Ünvan</TableHead>
             <TableHead>VKN / TCKN</TableHead>
-            <TableHead>Temsilci</TableHead>
             <TableHead>Konsinye Deposu</TableHead>
             <TableHead>Telefon</TableHead>
+            <TableHead>Temsilci</TableHead>
             {canMutate ? (
               <TableHead className="text-right">İşlem</TableHead>
             ) : null}
@@ -124,17 +124,17 @@ export function CustomersTable({
                 <TableCell className="font-mono text-blue-300">
                   {customer.vknTckn}
                 </TableCell>
-                <TableCell className="text-zinc-300">
-                  {customer.assignedUser?.fullName ?? (
-                    <span className="text-amber-300/80">Atanmamış</span>
-                  )}
-                </TableCell>
                 <TableCell>
                   {customer.locations[0]?.name ?? (
                     <span className="text-amber-300/80">Depo yok</span>
                   )}
                 </TableCell>
                 <TableCell>{customer.phone ?? "—"}</TableCell>
+                <TableCell className="text-zinc-300">
+                  {customer.assignedUser?.fullName ?? (
+                    <span className="text-amber-300/80">Atanmamış</span>
+                  )}
+                </TableCell>
                 {canMutate ? (
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
