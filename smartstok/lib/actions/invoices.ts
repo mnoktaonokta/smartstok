@@ -394,10 +394,11 @@ export async function listInvoicesAction() {
 
   return invoices.map((inv) => {
     const itemCount = inv.items.length;
-    const gross = inv.items.reduce(
+    const net = inv.items.reduce(
       (s, i) => s + Number(i.salePrice) - Number(i.discount),
       0,
     );
+    const tutar = Math.round(net * (1 + TAX_RATE / 100) * 100) / 100;
     const hasPdf = Boolean(
       inv.externalViewUrl ||
         (inv.eDocumentProvider &&
@@ -412,7 +413,7 @@ export async function listInvoicesAction() {
       customerName: inv.customer?.name ?? "—",
       customerVkn: inv.customer?.vknTckn ?? "—",
       itemCount,
-      netApprox: gross.toFixed(2),
+      tutar: tutar.toFixed(2),
       bizimHesapGuid: inv.bizimHesapGuid,
       bizimHesapUrl: inv.bizimHesapUrl,
       documentType: inv.documentType,

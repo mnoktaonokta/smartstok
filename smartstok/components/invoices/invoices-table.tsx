@@ -24,7 +24,7 @@ export type InvoiceListRow = {
   customerName: string;
   customerVkn: string;
   itemCount: number;
-  netApprox: string;
+  tutar: string;
   bizimHesapGuid: string | null;
   documentType: string | null;
   eDocumentProvider: string | null;
@@ -303,23 +303,21 @@ export function InvoicesTable({ invoices }: { invoices: InvoiceListRow[] }) {
           <TableRow>
             <TableHead>Tarih</TableHead>
             <TableHead>No</TableHead>
-            <TableHead>Sağlayıcı</TableHead>
-            <TableHead>Durum</TableHead>
             <TableHead>Müşteri</TableHead>
-            <TableHead>Kalem</TableHead>
-            <TableHead>Net (≈)</TableHead>
+            <TableHead>Tutar</TableHead>
+            <TableHead>Durum</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {invoices.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="py-10 text-center text-zinc-500">
+              <TableCell colSpan={5} className="py-10 text-center text-zinc-500">
                 Henüz fatura yok.
               </TableCell>
             </TableRow>
           ) : filtered.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="py-10 text-center text-zinc-500">
+              <TableCell colSpan={5} className="py-10 text-center text-zinc-500">
                 Eşleşen fatura bulunamadı.
               </TableCell>
             </TableRow>
@@ -347,14 +345,21 @@ export function InvoicesTable({ invoices }: { invoices: InvoiceListRow[] }) {
                     ) : null}
                   </Link>
                 </TableCell>
-                <TableCell className="text-xs text-zinc-300">
-                  {inv.eDocumentProvider ? (
-                    <span>{inv.eDocumentProvider}</span>
-                  ) : inv.bizimHesapGuid ? (
-                    <span className="text-zinc-500">Bizim Hesap</span>
-                  ) : (
-                    "—"
-                  )}
+                <TableCell>
+                  <Link href={`/dashboard/invoices/${inv.id}`}>
+                    <p className="text-white">{inv.customerName}</p>
+                    <p className="font-mono text-xs text-zinc-500">
+                      {inv.customerVkn}
+                    </p>
+                  </Link>
+                </TableCell>
+                <TableCell className="tabular-nums">
+                  {inv.docStatus === "DESPATCHED" && !inv.documentType
+                    ? "0,00 ₺"
+                    : `${Number(inv.tutar).toLocaleString("tr-TR", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })} ₺`}
                 </TableCell>
                 <TableCell>
                   <Link href={`/dashboard/invoices/${inv.id}`}>
@@ -367,20 +372,6 @@ export function InvoicesTable({ invoices }: { invoices: InvoiceListRow[] }) {
                       </p>
                     ) : null}
                   </Link>
-                </TableCell>
-                <TableCell>
-                  <Link href={`/dashboard/invoices/${inv.id}`}>
-                    <p className="text-white">{inv.customerName}</p>
-                    <p className="font-mono text-xs text-zinc-500">
-                      {inv.customerVkn}
-                    </p>
-                  </Link>
-                </TableCell>
-                <TableCell className="font-mono">{inv.itemCount}</TableCell>
-                <TableCell className="tabular-nums">
-                  {inv.docStatus === "DESPATCHED" && !inv.documentType
-                    ? "0,00 ₺"
-                    : `${Number(inv.netApprox).toLocaleString("tr-TR")} ₺`}
                 </TableCell>
               </TableRow>
             ))
