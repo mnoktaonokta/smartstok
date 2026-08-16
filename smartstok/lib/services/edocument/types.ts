@@ -170,8 +170,13 @@ export type UblInvoiceInput = {
    * Ana VKN muhasebe biriminde, harcama birimi VKN burada.
    */
   buyer?: UblParty | null;
-  /** PayeeFinancialAccount IBAN (kamu faturalarında GİB zorunlu) */
+  /** PayeeFinancialAccount IBAN (kamu faturalarında GİB zorunlu). Banka metni cbc:Note’ta. */
   paymentIban?: string | null;
+  paymentNote?: string | null;
+  /** Firma logosu (görsel XSLT’ye gömülür) */
+  logo?: { mimeType: string; base64: string } | null;
+  /** HH:MM:SS — görselde fatura saati */
+  issueTime?: string | null;
   lines: UblLine[];
   note?: string;
 };

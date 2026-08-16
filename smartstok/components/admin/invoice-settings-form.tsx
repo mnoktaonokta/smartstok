@@ -286,8 +286,8 @@ export function InvoiceSettingsForm({
           <div>
             <Label htmlFor="bankAccountInfo">Banka Hesap Bilgileriniz</Label>
             <p className="mt-1 text-xs text-zinc-500">
-              Bu metin fatura kesilirken otomatik olarak fatura açıklama
-              (Note) alanına eklenir.
+              Bu metin fatura görselindeki Genel Açıklamalar alanına basılır
+              (IBAN, banka adı, şube).
             </p>
           </div>
           <textarea

@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import type { CompanySettings, Customer } from "@/app/generated/prisma/client";
-import { EIRSALIYE_XSLT_BASE64 } from "./xslt/embeddedXslt";
+import { eirsaliyeXsltBase64 } from "./xslt/load-xslt";
 
 export type DespatchLineInput = {
   productName: string;
@@ -186,7 +186,7 @@ export function buildDespatchUbl(params: {
     <cbc:IssueDate>${dateStr}</cbc:IssueDate>
     <cbc:DocumentType>XSLT</cbc:DocumentType>
     <cac:Attachment>
-      <cbc:EmbeddedDocumentBinaryObject mimeCode="application/xml" encodingCode="Base64" characterSetCode="UTF-8" filename="eIrsaliye.xslt">${EIRSALIYE_XSLT_BASE64}</cbc:EmbeddedDocumentBinaryObject>
+      <cbc:EmbeddedDocumentBinaryObject mimeCode="application/xml" encodingCode="Base64" characterSetCode="UTF-8" filename="eIrsaliye.xslt">${eirsaliyeXsltBase64()}</cbc:EmbeddedDocumentBinaryObject>
     </cac:Attachment>
   </cac:AdditionalDocumentReference>
   <cac:Signature>

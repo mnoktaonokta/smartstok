@@ -54,6 +54,17 @@ ${params.map((p) => `        <arr:string>${escapeXml(p)}</arr:string>`).join("\n
       </tem:paramList>`;
 }
 
+/** GetDocumentData için belge tipi denemeleri (yeni e-Arşiv TYPE2 / taslak). */
+function documentTypeDownloadAttempts(documentType: string): string[] {
+  if (documentType === "EARCHIVE") {
+    return ["EARCHIVE", "EARCHIVETYPE2", "DRAFTEARCHIVE"];
+  }
+  if (documentType === "EINVOICE") {
+    return ["EINVOICE", "DRAFTINVOICE"];
+  }
+  return [documentType];
+}
+
 async function postElogoSoap(opts: {
   endpoint: string;
   soapAction: string;
@@ -443,7 +454,8 @@ export class ELogoDocumentAdapter implements IDocumentProvider {
   > {
     const packed = ublToElogoZip(opts.uuid, opts.ublXml);
     const today = new Date().toISOString().slice(0, 10);
-    // Görsel XSLT UBL Attachment içinde; portal öndeğer / XSLTUUID gerekmez
+    // UBL Attachment’taki XSLT kullanılır; UseDefaultXSLT=0 XSLTUUID olmadan
+    // e-Logo’da PDF üretimini düşürebiliyor (belge var, PDF yok).
     const params = [`DOCUMENTTYPE=${opts.documentType}`, "SIGNED=0"];
     const xsltUuid = process.env.ELOGO_XSLT_UUID?.trim();
     if (xsltUuid) {
@@ -530,9 +542,9 @@ export class ELogoDocumentAdapter implements IDocumentProvider {
       if (!sent.ok) return { ok: false, error: sent.error, raw: sent.raw };
 
       let pdfBase64: string | null = null;
-      for (let attempt = 0; attempt < 4 && !pdfBase64; attempt++) {
+      for (let attempt = 0; attempt < 6 && !pdfBase64; attempt++) {
         if (attempt > 0) {
-          await new Promise((r) => setTimeout(r, 1500 * attempt));
+          await new Promise((r) => setTimeout(r, 2000 * attempt));
         }
         try {
           const dl = await this.downloadOutgoing(input.uuid, {
@@ -738,56 +750,32 @@ export class ELogoDocumentAdapter implements IDocumentProvider {
 
     const uuid = (options?.uuid || belgeOid).trim();
     const documentType = options?.documentType ?? "EINVOICE";
+    const typeAttempts = documentTypeDownloadAttempts(documentType);
 
     try {
       return await this.withSession(async (sessionID) => {
-        const body = `<tem:GetDocumentData>
-      <tem:sessionID>${escapeXml(sessionID)}</tem:sessionID>
-      <tem:uuid>${escapeXml(uuid)}</tem:uuid>
-      ${paramListXml([
-        `DOCUMENTTYPE=${documentType}`,
-        "DATAFORMAT=PDF",
-      ])}
-    </tem:GetDocumentData>`;
-
-        const res = await postElogoSoap({
-          endpoint: this.creds.endpoint,
-          soapAction: this.soapAction("GetDocumentData"),
-          envelope: buildElogoEnvelope(body),
-        });
-
-        const fault = extractSoapFault(res.body);
-        if (fault) return { ok: false, error: fault };
-        if (!res.ok) {
-          return {
-            ok: false,
-            error: `GetDocumentData — ${summarizeHttpError(res.status, res.body)}`,
-          };
+        let lastError = "PDF alınamadı.";
+        for (const dt of typeAttempts) {
+          const pulled = await this.getDocumentDataPdf(sessionID, uuid, dt);
+          if (pulled.ok) return pulled;
+          lastError = pulled.error;
         }
-
-        const code = resultCode(res.body);
-        if (code && code !== "1") {
-          return {
-            ok: false,
-            error: resultMsg(res.body) || `PDF resultCode=${code}`,
-          };
+        for (const dt of typeAttempts.filter((t) => !t.startsWith("DRAFT"))) {
+          const ubl = await this.getDocumentDataRaw(
+            sessionID,
+            uuid,
+            dt,
+            "UBL",
+          );
+          if (ubl.ok) {
+            return {
+              ok: false,
+              error:
+                "Fatura e-Logo’da kayıtlı ama PDF üretilemedi. Yeni bir fatura kesin (görsel şablon düzeltildi).",
+            };
+          }
         }
-
-        const rawB64 = extractDocumentBinaryBase64(res.body);
-        if (!rawB64) {
-          return { ok: false, error: "PDF verisi dönmedi" };
-        }
-
-        const pdfBase64 = await normalizeElogoPdfBase64(rawB64);
-        if (!pdfBase64) {
-          return {
-            ok: false,
-            error:
-              "e-Logo yanıtı PDF değil (zip/HTML). Belge henüz hazır olmayabilir.",
-          };
-        }
-
-        return { ok: true, pdfBase64, faturaURL: null };
+        return { ok: false, error: lastError };
       });
     } catch (e) {
       return {
@@ -795,6 +783,76 @@ export class ELogoDocumentAdapter implements IDocumentProvider {
         error: e instanceof Error ? e.message : "PDF indirme hatası",
       };
     }
+  }
+
+  private async getDocumentDataRaw(
+    sessionID: string,
+    uuid: string,
+    documentType: string,
+    dataFormat: "PDF" | "UBL" | "HTML",
+  ): Promise<{ ok: true; rawB64: string } | { ok: false; error: string }> {
+    const body = `<tem:GetDocumentData>
+      <tem:sessionID>${escapeXml(sessionID)}</tem:sessionID>
+      <tem:uuid>${escapeXml(uuid)}</tem:uuid>
+      ${paramListXml([
+        `DOCUMENTTYPE=${documentType}`,
+        `DATAFORMAT=${dataFormat}`,
+      ])}
+    </tem:GetDocumentData>`;
+
+    const res = await postElogoSoap({
+      endpoint: this.creds.endpoint,
+      soapAction: this.soapAction("GetDocumentData"),
+      envelope: buildElogoEnvelope(body),
+    });
+
+    const fault = extractSoapFault(res.body);
+    if (fault) return { ok: false, error: fault };
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: `GetDocumentData — ${summarizeHttpError(res.status, res.body)}`,
+      };
+    }
+
+    const code = resultCode(res.body);
+    if (code && code !== "1") {
+      return {
+        ok: false,
+        error: resultMsg(res.body) || `${dataFormat} resultCode=${code}`,
+      };
+    }
+
+    const rawB64 = extractDocumentBinaryBase64(res.body);
+    if (!rawB64) {
+      return { ok: false, error: `${dataFormat} verisi dönmedi` };
+    }
+    return { ok: true, rawB64 };
+  }
+
+  private async getDocumentDataPdf(
+    sessionID: string,
+    uuid: string,
+    documentType: string,
+  ): Promise<DownloadOutgoingResult> {
+    const raw = await this.getDocumentDataRaw(
+      sessionID,
+      uuid,
+      documentType,
+      "PDF",
+    );
+    if (!raw.ok) return raw;
+
+    const pdfBase64 = await normalizeElogoPdfBase64(raw.rawB64);
+    if (!pdfBase64) {
+      return {
+        ok: false,
+        error:
+          "e-Logo yanıtı PDF değil (zip/HTML). Belge henüz hazır olmayabilir.",
+      };
+    }
+
+    return { ok: true, pdfBase64, faturaURL: null };
   }
 
   async cancelEArchive(input: {

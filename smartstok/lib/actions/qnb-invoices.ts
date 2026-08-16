@@ -15,13 +15,17 @@ import {
   parseGibDocumentSequence,
 } from "@/lib/services/edocument/ubl/buildInvoiceUbl";
 import { buildTibbiCihazIdentificationIds } from "@/lib/services/edocument/ubl/tibbi-cihaz";
-import { buildInvoiceDocumentNote } from "@/lib/services/edocument/invoice-note";
+import {
+  buildInvoiceDocumentNote,
+  extractIbanFromText,
+} from "@/lib/services/edocument/invoice-note";
 import {
   buildPublicEntityUblExtras,
   resolveInvoiceProfileId,
 } from "@/lib/services/edocument/kamu-invoice";
 import type { UblParty } from "@/lib/services/edocument/types";
 import { getOrCreateCompanySettings } from "@/lib/services/erp/company-settings";
+import { ublLogoFromSettings } from "@/lib/services/edocument/ubl/xslt/load-xslt";
 
 const TAX_RATE = 10;
 
@@ -318,7 +322,10 @@ export async function createQnbInvoiceAction(
         phone: customer.phone,
       },
       buyer,
-      paymentIban,
+      paymentIban:
+        paymentIban ?? extractIbanFromText(settings.bankAccountInfo),
+      logo: ublLogoFromSettings(settings),
+      issueTime: now.toISOString().slice(11, 19),
       lines: ublLines,
       note,
     });
@@ -345,6 +352,9 @@ export async function createQnbInvoiceAction(
             faturaNo: sent.faturaNo ?? invoiceNo,
             externalViewUrl: sent.faturaURL ?? null,
             pdfData: pdf ? new Uint8Array(pdf) : undefined,
+            lastError: pdf
+              ? null
+              : "PDF henüz oluşmadı. Biraz bekleyip PDF yenile deneyin.",
           },
         });
         for (const line of detailLines) {

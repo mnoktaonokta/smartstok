@@ -1,6 +1,9 @@
 /**
- * Fatura UBL Note alanı — kullanıcı notu + banka / ödeme bilgisi.
+ * Fatura UBL Note alanı — kullanıcı notu + Admin’deki banka bilgisi.
+ * Görsel XSLT “Genel Açıklamalar”da cbc:Note satırlarını basar.
  */
+
+const LEGACY_DEFAULT_NOTE = "SmartStok konsinye faturalandırma";
 
 /** Metinden TR IBAN yakala (boşluklar yok sayılır). */
 export function extractIbanFromText(
@@ -12,14 +15,27 @@ export function extractIbanFromText(
   return m ? m[0]!.toUpperCase() : null;
 }
 
+function stripLegacyAndBank(userNote: string, bank: string): string {
+  let user = userNote.trim();
+  if (bank && user.includes(bank)) {
+    user = user.replace(bank, "");
+  }
+  return user
+    .replace(new RegExp(LEGACY_DEFAULT_NOTE, "gi"), "")
+    .replace(/Banka Hesap Bilgileri:\s*/gi, "")
+    .trim();
+}
+
 export function buildInvoiceDocumentNote(
   userNote: string | null | undefined,
   bankAccountInfo: string | null | undefined,
   opts?: { isPublicEntity?: boolean },
 ): string {
-  const base = userNote?.trim() || "SmartStok konsinye faturalandırma";
-  const bank = bankAccountInfo?.trim();
-  const parts: string[] = [base];
+  const bank = bankAccountInfo?.trim() ?? "";
+  const user = stripLegacyAndBank(userNote ?? "", bank);
+  const parts: string[] = [];
+
+  if (user) parts.push(user);
 
   if (opts?.isPublicEntity) {
     parts.push(
@@ -28,14 +44,12 @@ export function buildInvoiceDocumentNote(
   }
 
   if (bank) {
-    if (!base.includes(bank) && !parts.some((p) => p.includes(bank))) {
-      parts.push(`Banka Hesap Bilgileri:\n${bank}`);
-    }
+    parts.push(bank);
   } else if (opts?.isPublicEntity) {
     parts.push(
       "Uyarı: Firma banka/IBAN bilgisi tanımlı değil (Admin → Fatura Bilgileri).",
     );
   }
 
-  return parts.join("\n\n");
+  return parts.join("\n");
 }

@@ -2,10 +2,9 @@ import "server-only";
 
 import type { UblInvoiceInput, UblLine } from "../types";
 import { escapeXml } from "../soap";
-import {
-  EARSIV_XSLT_BASE64,
-  EFATURA_XSLT_BASE64,
-} from "./xslt/embeddedXslt";
+import { amountInTurkishWords } from "./amount-in-words-tr";
+import { gibInvoiceQrPng } from "./gib-qr";
+import { invoiceVisualXsltBase64 } from "./xslt/load-xslt";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -97,21 +96,48 @@ function partyXml(
 </cac:${role}>`;
 }
 
-function paymentMeansXml(iban: string | null | undefined): string {
+function paymentMeansXml(
+  iban: string | null | undefined,
+  note?: string | null,
+): string {
   const digits = iban?.replace(/\s+/g, "").trim();
-  if (!digits) return "";
-  return `<cac:PaymentMeans>
-  <cbc:PaymentMeansCode>42</cbc:PaymentMeansCode>
+  const instruction = note?.trim();
+  if (!digits && !instruction) return "";
+  const account = digits
+    ? `
   <cac:PayeeFinancialAccount>
     <cbc:ID>${escapeXml(digits.toUpperCase())}</cbc:ID>
     <cbc:CurrencyCode>TRY</cbc:CurrencyCode>
-  </cac:PayeeFinancialAccount>
+  </cac:PayeeFinancialAccount>`
+    : "";
+  const instructionXml = instruction
+    ? `
+  <cbc:InstructionNote>${escapeXml(instruction)}</cbc:InstructionNote>`
+    : "";
+  return `<cac:PaymentMeans>
+  <cbc:PaymentMeansCode>42</cbc:PaymentMeansCode>${instructionXml}${account}
 </cac:PaymentMeans>`;
+}
+
+/** Her satır ayrı cbc:Note — XSLT Genel Açıklamalar’da satır kırılımı için. */
+function documentNotesXml(rawNote: string | null | undefined, yalniz: string): string {
+  const lines = (rawNote ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !line.toUpperCase().startsWith("YALNIZ"));
+  return [...lines, yalniz]
+    .map((line) => `  <cbc:Note>${escapeXml(line)}</cbc:Note>`)
+    .join("\n");
 }
 
 function xsltAttachmentXml(input: UblInvoiceInput): string {
   const isEarsiv = input.profileId === "EARSIVFATURA";
-  const b64 = isEarsiv ? EARSIV_XSLT_BASE64 : EFATURA_XSLT_BASE64;
+  const b64 = invoiceVisualXsltBase64(
+    input.logo,
+    isEarsiv ? "earsiv" : "efatura",
+    gibInvoiceQrPng(input),
+  );
   const filename = isEarsiv
     ? "smartstok-earsiv.xslt"
     : input.profileId === "ILAC_TIBBICIHAZ"
@@ -145,23 +171,39 @@ function xsltAttachmentXml(input: UblInvoiceInput): string {
 </cac:AdditionalDocumentReference>`;
 }
 
-/** UBL-TR fatura XML — e-Logo örneklerindeki gibi gömülü XSLT içerir. */
+/** UBL-TR fatura XML — gömülü görsel XSLT içerir. */
 export function buildInvoiceUbl(input: UblInvoiceInput): string {
   const lines = input.lines;
   const lineExtension = round2(lines.reduce((s, l) => s + lineNet(l), 0));
   const taxAmount = round2(lines.reduce((s, l) => s + lineTax(l), 0));
+  const allowanceTotal = round2(
+    lines.reduce((s, l) => {
+      const gross = l.unitPrice * l.quantity;
+      return s + Math.min(l.discount, gross);
+    }, 0),
+  );
   const payable = round2(lineExtension + taxAmount);
   const uuid = escapeXml(input.uuid);
   const documentId = escapeXml(input.documentId);
   const issueDate = escapeXml(input.issueDate);
-  const note = escapeXml(input.note ?? "SmartStok");
+  const issueTime = escapeXml(
+    (input.issueTime?.trim() || new Date().toISOString().slice(11, 19)).slice(
+      0,
+      8,
+    ),
+  );
+  const yalniz = `YALNIZ: ${amountInTurkishWords(payable)}`;
+  const notesXml = documentNotesXml(input.note, yalniz);
 
   const invoiceLines = lines
     .map((line) => {
       const net = lineNet(line);
       const tax = lineTax(line);
+      const gross = round2(line.unitPrice * line.quantity);
+      const discount = round2(Math.min(line.discount, gross));
+      const discRate = gross > 0 ? round2((discount / gross) * 100) : 0;
       const name = escapeXml(line.name);
-      // e-Logo XSLT açıklama sütununda cbc:Description kullanır
+      // Görsel XSLT açıklama satırında cbc:Description kullanır
       const description = escapeXml(line.note?.trim() || line.name);
       const sellersId = escapeXml(line.sellersItemId?.trim() || "");
       const sellersXml = sellersId
@@ -178,10 +220,20 @@ export function buildInvoiceUbl(input: UblInvoiceInput): string {
     </cac:AdditionalItemIdentification>`,
         )
         .join("");
+      const allowanceXml =
+        discount > 0
+          ? `
+  <cac:AllowanceCharge>
+    <cbc:ChargeIndicator>false</cbc:ChargeIndicator>
+    <cbc:MultiplierFactorNumeric>${discRate.toFixed(2)}</cbc:MultiplierFactorNumeric>
+    <cbc:Amount currencyID="TRY">${discount.toFixed(2)}</cbc:Amount>
+    <cbc:BaseAmount currencyID="TRY">${gross.toFixed(2)}</cbc:BaseAmount>
+  </cac:AllowanceCharge>`
+          : "";
       return `<cac:InvoiceLine>
   <cbc:ID>${line.id}</cbc:ID>
   <cbc:InvoicedQuantity unitCode="C62">${line.quantity}</cbc:InvoicedQuantity>
-  <cbc:LineExtensionAmount currencyID="TRY">${net.toFixed(2)}</cbc:LineExtensionAmount>
+  <cbc:LineExtensionAmount currencyID="TRY">${net.toFixed(2)}</cbc:LineExtensionAmount>${allowanceXml}
   <cac:TaxTotal>
     <cbc:TaxAmount currencyID="TRY">${tax.toFixed(2)}</cbc:TaxAmount>
     <cac:TaxSubtotal>
@@ -243,15 +295,16 @@ export function buildInvoiceUbl(input: UblInvoiceInput): string {
   <cbc:CopyIndicator>false</cbc:CopyIndicator>
   <cbc:UUID>${uuid}</cbc:UUID>
   <cbc:IssueDate>${issueDate}</cbc:IssueDate>
+  <cbc:IssueTime>${issueTime}</cbc:IssueTime>
   <cbc:InvoiceTypeCode>${input.invoiceTypeCode}</cbc:InvoiceTypeCode>
-  <cbc:Note>${note}</cbc:Note>
+${notesXml}
   <cbc:DocumentCurrencyCode>${input.documentCurrencyCode}</cbc:DocumentCurrencyCode>
   <cbc:LineCountNumeric>${lines.length}</cbc:LineCountNumeric>
   ${xsltAttachmentXml(input)}
   ${partyXml(input.supplier, "AccountingSupplierParty")}
   ${partyXml(input.customer, "AccountingCustomerParty")}
   ${input.buyer ? partyXml(input.buyer, "BuyerCustomerParty") : ""}
-  ${paymentMeansXml(input.paymentIban)}
+  ${paymentMeansXml(input.paymentIban, input.paymentNote)}
   <cac:TaxTotal>
     <cbc:TaxAmount currencyID="TRY">${taxAmount.toFixed(2)}</cbc:TaxAmount>
     ${taxSubtotals}
@@ -260,6 +313,7 @@ export function buildInvoiceUbl(input: UblInvoiceInput): string {
     <cbc:LineExtensionAmount currencyID="TRY">${lineExtension.toFixed(2)}</cbc:LineExtensionAmount>
     <cbc:TaxExclusiveAmount currencyID="TRY">${lineExtension.toFixed(2)}</cbc:TaxExclusiveAmount>
     <cbc:TaxInclusiveAmount currencyID="TRY">${payable.toFixed(2)}</cbc:TaxInclusiveAmount>
+    <cbc:AllowanceTotalAmount currencyID="TRY">${allowanceTotal.toFixed(2)}</cbc:AllowanceTotalAmount>
     <cbc:PayableAmount currencyID="TRY">${payable.toFixed(2)}</cbc:PayableAmount>
   </cac:LegalMonetaryTotal>
   ${invoiceLines}
